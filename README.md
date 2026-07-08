@@ -3,6 +3,8 @@
   <h1>CampbellXGM FlowOS</h1>
   <p><strong>Extreme Gaming Mode App for Android</strong></p>
   <p>Locks pings, freezes background apps, and maximizes device performance.</p>
+
+  <h3><a href="https://github.com/niiabe/campbellxgm-flowos/raw/master/downloads/CampbellXGMv1.apk">📥 Download CampbellXGMv1.apk</a></h3>
 </div>
 
 ---
