@@ -1,0 +1,80 @@
+{
+  "omo": "1.0",
+  "project": "CampelXGM",
+  "orchestrator": "sisyphus",
+  "routing": {
+    "category": "visual-engineering",
+    "model": "auto"
+  },
+  "skills": [
+    "auth",
+    "payments",
+    "mobile-ui"
+  ],
+  "phases": [
+    {
+      "id": "initialization",
+      "name": "Initialization",
+      "goal": "Set up project foundation and development environment",
+      "taskCount": 5
+    },
+    {
+      "id": "architecture",
+      "name": "Architecture Setup",
+      "goal": "Establish project architecture and core infrastructure",
+      "taskCount": 8
+    },
+    {
+      "id": "authentication",
+      "name": "Authentication",
+      "goal": "Implement secure authentication and authorization system",
+      "taskCount": 6
+    },
+    {
+      "id": "data_layer",
+      "name": "Data Layer",
+      "goal": "Implement data storage, retrieval, and management",
+      "taskCount": 6
+    },
+    {
+      "id": "business_logic",
+      "name": "Business Logic",
+      "goal": "Implement core business logic and feature functionality",
+      "taskCount": 9
+    },
+    {
+      "id": "interface",
+      "name": "Interface Layer",
+      "goal": "Build user interface and user-facing features",
+      "taskCount": 6
+    }
+  ],
+  "architecture": "offline-first",
+  "stack": {
+    "frontend": "react / vue (with service worker)",
+    "backend": "local-first (IndexedDB / SQLite)",
+    "database": "local storage / IndexedDB / SQLite"
+  },
+  "deferred": [
+    {
+      "field": "backend",
+      "options": [
+        "node.js",
+        "python",
+        "java",
+        "go",
+        "firebase"
+      ]
+    },
+    {
+      "field": "database",
+      "options": [
+        "postgresql",
+        "mongodb",
+        "sqlite",
+        "mysql",
+        "firebase"
+      ]
+    }
+  ]
+}

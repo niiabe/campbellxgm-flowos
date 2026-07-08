@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">campbellxgm</string>
+    <string name="accessibility_description">CampbellXGM uses Accessibility to force-stop background apps during gameplay (like Greenify) and to detect when you leave a game so it can safely restore your phone\'s original settings.</string>
+</resources>
