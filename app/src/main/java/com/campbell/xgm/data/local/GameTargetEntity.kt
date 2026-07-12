@@ -1,7 +1,6 @@
 package com.campbell.xgm.data.local
 
-data class GameTargetEntity(
+data class GameTarget(
     val packageName: String,
-    val gameName: String,
-    val isAllowed: Boolean = true
+    val gameName: String
 )

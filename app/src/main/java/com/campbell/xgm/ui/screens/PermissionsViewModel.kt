@@ -1,8 +1,10 @@
 package com.campbell.xgm.ui.screens
 
+import android.app.AppOpsManager
 import android.app.Application
 import android.app.NotificationManager
 import android.app.admin.DevicePolicyManager
+import android.app.usage.UsageStatsManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
@@ -35,6 +37,9 @@ class PermissionsViewModel(application: Application) : AndroidViewModel(applicat
     private val _hasAccessibility = MutableStateFlow(false)
     val hasAccessibility: StateFlow<Boolean> = _hasAccessibility.asStateFlow()
 
+    private val _hasUsageStats = MutableStateFlow(false)
+    val hasUsageStats: StateFlow<Boolean> = _hasUsageStats.asStateFlow()
+
     fun checkPermissions() {
         val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
         val adminComponent = ComponentName(context, CampbellAdminReceiver::class.java)
@@ -52,5 +57,17 @@ class PermissionsViewModel(application: Application) : AndroidViewModel(applicat
         _hasWriteSettings.value = Settings.System.canWrite(context)
 
         _hasAccessibility.value = PermissionUtils.isAccessibilityServiceEnabled(context)
+
+        _hasUsageStats.value = isUsageStatsGranted()
+    }
+
+    private fun isUsageStatsGranted(): Boolean {
+        val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager ?: return false
+        val mode = appOps.checkOpNoThrow(
+            AppOpsManager.OPSTR_GET_USAGE_STATS,
+            android.os.Process.myUid(),
+            context.packageName
+        )
+        return mode == AppOpsManager.MODE_ALLOWED
     }
 }

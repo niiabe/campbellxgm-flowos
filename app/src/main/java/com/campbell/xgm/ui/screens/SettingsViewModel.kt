@@ -74,9 +74,32 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _isStorageCleanerEnabled = MutableStateFlow(sharedPreferences.getBoolean("storage_cleaner", true))
     val isStorageCleanerEnabled: StateFlow<Boolean> = _isStorageCleanerEnabled
 
+    private val _isDarkModeEnabled = MutableStateFlow(sharedPreferences.getBoolean("dark_mode", true))
+    val isDarkModeEnabled: StateFlow<Boolean> = _isDarkModeEnabled
+
+    private val _isStatsOverlayEnabled = MutableStateFlow(sharedPreferences.getBoolean("stats_overlay", false))
+    val isStatsOverlayEnabled: StateFlow<Boolean> = _isStatsOverlayEnabled
+
+    // Exclusion List
+    private val _excludedApps = MutableStateFlow(loadExcludedApps())
+    val excludedApps: StateFlow<Set<String>> = _excludedApps
+
+    private fun loadExcludedApps(): Set<String> {
+        val raw = sharedPreferences.getString("excluded_apps", "") ?: ""
+        return if (raw.isEmpty()) emptySet() else raw.split(",").toSet()
+    }
+
+    fun setExcludedApps(apps: Set<String>) {
+        sharedPreferences.edit { putString("excluded_apps", apps.joinToString(",")) }
+        _excludedApps.value = apps
+    }
+
     // DNS Provider
     private val _selectedDns = MutableStateFlow(getCurrentDns())
     val selectedDns: StateFlow<DnsProvider> = _selectedDns
+
+    private val _dnsError = MutableStateFlow<String?>(null)
+    val dnsError: StateFlow<String?> = _dnsError
 
     // Device Owner State
     private val _isDeviceOwner = MutableStateFlow(dpm.isDeviceOwnerApp(application.packageName))
@@ -150,6 +173,16 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun toggleStorageCleaner(enabled: Boolean) {
         sharedPreferences.edit { putBoolean("storage_cleaner", enabled) }
         _isStorageCleanerEnabled.value = enabled
+    }
+
+    fun toggleDarkMode(enabled: Boolean) {
+        sharedPreferences.edit { putBoolean("dark_mode", enabled) }
+        _isDarkModeEnabled.value = enabled
+    }
+
+    fun toggleStatsOverlay(enabled: Boolean) {
+        sharedPreferences.edit { putBoolean("stats_overlay", enabled) }
+        _isStatsOverlayEnabled.value = enabled
     }
 
     suspend fun getCacheSize(packageName: String): String = withContext(Dispatchers.IO) {
@@ -257,6 +290,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                         dpm.setGlobalSetting(adminComponent, "private_dns_mode", "hostname")
                         dpm.setGlobalSetting(adminComponent, "private_dns_specifier", provider.hostname)
                     }
+                    _dnsError.value = null
                 } else {
                     val contentResolver = getApplication<Application>().contentResolver
                     if (provider == DnsProvider.SYSTEM_DEFAULT) {
@@ -265,8 +299,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                         Settings.Global.putString(contentResolver, "private_dns_mode", "hostname")
                         Settings.Global.putString(contentResolver, "private_dns_specifier", provider.hostname)
                     }
+                    _dnsError.value = null
                 }
             } catch (e: SecurityException) {
+                _dnsError.value = "DNS change requires Device Owner or WRITE_SECURE_SETTINGS (ADB)"
                 android.util.Log.e("SettingsViewModel", "Failed to apply DNS settings (Requires Device Owner or WRITE_SECURE_SETTINGS via ADB): ${e.message}")
             }
         }

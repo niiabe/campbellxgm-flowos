@@ -14,8 +14,9 @@ import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.core.net.toUri
-import java.util.Collections
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 class SafetyInterceptor : AccessibilityService() {
 
@@ -29,12 +30,34 @@ class SafetyInterceptor : AccessibilityService() {
             private set
 
         fun isRunning(): Boolean = instance != null
+
+        // Resource IDs for Force Stop button across common Android versions/OEMs
+        private val FORCE_STOP_IDS = intArrayOf(
+            // Stock Android / AOSP
+            android.R.id.button2, // Often used for negative/cancel buttons
+        )
+
+        // Text patterns to search for Force Stop button (handles OEM/locale variations)
+        private val FORCE_STOP_TEXTS = listOf(
+            "Force stop", "FORCE STOP", "Force Stop",
+            "Forced stop", "Stop app", "Force-stop",
+            "force stop", "强制停止", "강제 중지",
+            "Éteindre", "Beenden", "Forzar cierre",
+            "Forzado stop", "Forzare arresto"
+        )
+
+        // Text patterns for the confirmation dialog button
+        private val CONFIRM_TEXTS = listOf(
+            "OK", "FORCE STOP", "Ok", "Force stop",
+            "Confirm", "确定", "확인", "Aceptar",
+            "Bestätigen", "Conferma"
+        )
     }
 
     private val handler = Handler(Looper.getMainLooper())
-    private val pendingPackages = Collections.synchronizedList(mutableListOf<String>())
+    private val pendingPackages = CopyOnWriteArrayList<String>()
     private val isProcessing = AtomicBoolean(false)
-    private var onCompleteCallback: (() -> Unit)? = null
+    private val onCompleteCallback = AtomicReference<(() -> Unit)?>(null)
 
     private val forceStopReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -76,10 +99,9 @@ class SafetyInterceptor : AccessibilityService() {
     }
 
     fun forceStopApps(packages: List<String>, onComplete: (() -> Unit)? = null) {
-        this.onCompleteCallback = onComplete
+        onCompleteCallback.set(onComplete)
         if (packages.isEmpty()) {
-            onCompleteCallback?.invoke()
-            onCompleteCallback = null
+            invokeCallback()
             return
         }
         pendingPackages.clear()
@@ -92,12 +114,11 @@ class SafetyInterceptor : AccessibilityService() {
         if (pendingPackages.isEmpty()) {
             isProcessing.set(false)
             Log.i(TAG, "All packages processed for force-stop")
-            onCompleteCallback?.invoke()
-            onCompleteCallback = null
+            invokeCallback()
             return
         }
 
-        val targetPkg = pendingPackages.first()
+        val targetPkg = pendingPackages.removeAt(0)
         Log.i(TAG, "Force-stopping: $targetPkg")
 
         try {
@@ -108,7 +129,6 @@ class SafetyInterceptor : AccessibilityService() {
             startActivity(intent)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to open settings for $targetPkg: ${e.message}")
-            synchronized(pendingPackages) { if (pendingPackages.isNotEmpty()) pendingPackages.removeFirst() }
             handler.postDelayed({ processNextPackage() }, 300)
         }
     }
@@ -118,17 +138,27 @@ class SafetyInterceptor : AccessibilityService() {
             val rootNode = rootInActiveWindow
             if (rootNode == null) {
                 Log.w(TAG, "rootInActiveWindow is null, skipping...")
-                synchronized(pendingPackages) { if (pendingPackages.isNotEmpty()) pendingPackages.removeFirst() }
+                if (pendingPackages.isNotEmpty()) pendingPackages.removeAt(0)
                 handler.postDelayed({ processNextPackage() }, 300)
                 return@postDelayed
             }
 
-            // Try to find and click "Force Stop" button
-            val forceStopNode = findNodeByText(rootNode, "Force stop")
-                ?: findNodeByText(rootNode, "FORCE STOP")
-                ?: findNodeByText(rootNode, "Force Stop")
+            // Try to find Force Stop button using resource IDs first, then text search
+            var forceStopNode = findNodeByResourceId(rootNode)
+            if (forceStopNode == null) {
+                for (text in FORCE_STOP_TEXTS) {
+                    forceStopNode = findNodeByText(rootNode, text)
+                    if (forceStopNode != null) break
+                }
+            }
 
             if (forceStopNode != null) {
+                if (!forceStopNode.isEnabled) {
+                    Log.i(TAG, "Force Stop already disabled for $packageName (app already stopped), skipping...")
+                    if (pendingPackages.isNotEmpty()) pendingPackages.removeAt(0)
+                    handler.postDelayed({ processNextPackage() }, 200)
+                    return@postDelayed
+                }
                 Log.i(TAG, "Found Force Stop button, clicking...")
                 performClick(forceStopNode)
 
@@ -137,14 +167,16 @@ class SafetyInterceptor : AccessibilityService() {
                     val confirmRoot = rootInActiveWindow
                     if (confirmRoot == null) {
                         Log.w(TAG, "rootInActiveWindow is null during confirmation, skipping...")
-                        synchronized(pendingPackages) { if (pendingPackages.isNotEmpty()) pendingPackages.removeFirst() }
+                        if (pendingPackages.isNotEmpty()) pendingPackages.removeAt(0)
                         handler.postDelayed({ processNextPackage() }, 300)
                         return@postDelayed
                     }
 
-                    val confirmNode = findNodeByText(confirmRoot, "OK")
-                        ?: findNodeByText(confirmRoot, "FORCE STOP")
-                        ?: findNodeByText(confirmRoot, "Ok")
+                    var confirmNode: AccessibilityNodeInfo? = null
+                    for (text in CONFIRM_TEXTS) {
+                        confirmNode = findNodeByText(confirmRoot, text)
+                        if (confirmNode != null) break
+                    }
 
                     if (confirmNode != null) {
                         Log.i(TAG, "Confirming force stop...")
@@ -153,17 +185,25 @@ class SafetyInterceptor : AccessibilityService() {
                         Log.w(TAG, "Confirm button not found, skipping...")
                     }
 
-                    // Move to next package
-                    synchronized(pendingPackages) { if (pendingPackages.isNotEmpty()) pendingPackages.removeFirst() }
+                    if (pendingPackages.isNotEmpty()) pendingPackages.removeAt(0)
                     handler.postDelayed({ processNextPackage() }, 500)
                 }, 500)
             } else {
-                // Button not found, might be a system app or different UI
                 Log.w(TAG, "Force Stop button not found for $packageName, skipping...")
-                synchronized(pendingPackages) { if (pendingPackages.isNotEmpty()) pendingPackages.removeFirst() }
+                if (pendingPackages.isNotEmpty()) pendingPackages.removeAt(0)
                 handler.postDelayed({ processNextPackage() }, 300)
             }
         }, 800)
+    }
+
+    private fun invokeCallback() {
+        onCompleteCallback.getAndSet(null)?.invoke()
+    }
+
+    private fun findNodeByResourceId(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        // Some Android versions expose the Force Stop button via known resource IDs
+        val nodes = root.findAccessibilityNodeInfosByViewId("com.android.settings:id/force_stop_button")
+        return nodes?.firstOrNull()
     }
 
     private fun findNodeByText(root: AccessibilityNodeInfo, text: String): AccessibilityNodeInfo? {
@@ -189,6 +229,7 @@ class SafetyInterceptor : AccessibilityService() {
             handler.removeCallbacksAndMessages(null)
             unregisterReceiver(forceStopReceiver)
         } catch (_: Exception) {}
+        invokeCallback()
         instance = null
         super.onDestroy()
     }

@@ -12,6 +12,7 @@ import com.campbell.xgm.ui.screens.SettingsScreen
 import com.campbell.xgm.ui.screens.AboutScreen
 import com.campbell.xgm.ui.screens.AdbSetupScreen
 import com.campbell.xgm.ui.screens.PermissionsScreen
+import com.campbell.xgm.ui.screens.OnboardingScreen
 
 sealed class Screen(val route: String) {
     object Dashboard : Screen("dashboard")
@@ -19,6 +20,7 @@ sealed class Screen(val route: String) {
     object About : Screen("about")
     object AdbSetup : Screen("adb_setup")
     object Permissions : Screen("permissions")
+    object Onboarding : Screen("onboarding")
 }
 
 @Composable
@@ -30,6 +32,15 @@ fun AppNavigation(startDestination: String = Screen.Dashboard.route) {
         startDestination = startDestination,
         modifier = Modifier.background(MaterialTheme.colorScheme.background)
     ) {
+        composable(Screen.Onboarding.route) {
+            OnboardingScreen(
+                onFinished = {
+                    navController.navigate(Screen.Permissions.route) {
+                        popUpTo(Screen.Onboarding.route) { inclusive = true }
+                    }
+                }
+            )
+        }
         composable(Screen.Permissions.route) {
             PermissionsScreen(
                 onPermissionsGranted = {
@@ -42,7 +53,12 @@ fun AppNavigation(startDestination: String = Screen.Dashboard.route) {
         composable(Screen.Dashboard.route) {
             DashboardScreen(
                 onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
-                onNavigateToAbout = { navController.navigate(Screen.About.route) }
+                onNavigateToAbout = { navController.navigate(Screen.About.route) },
+                onNavigateToPermissions = {
+                    navController.navigate(Screen.Permissions.route) {
+                        popUpTo(Screen.Dashboard.route) { inclusive = true }
+                    }
+                }
             )
         }
         composable(Screen.Settings.route) {

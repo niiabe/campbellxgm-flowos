@@ -1,7 +1,10 @@
 package com.campbell.xgm.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -10,12 +13,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.campbell.xgm.ui.components.AlienButton
 import androidx.core.net.toUri
 import com.campbell.xgm.ui.components.HeaderBar
+import android.content.pm.PackageManager
 
 @Composable
 fun SettingsScreen(
@@ -38,7 +43,11 @@ fun SettingsScreen(
     val isNotificationFilterEnabled by viewModel.isNotificationFilterEnabled.collectAsState()
     val isCooldownEnabled by viewModel.isCooldownEnabled.collectAsState()
     val isStorageCleanerEnabled by viewModel.isStorageCleanerEnabled.collectAsState()
+    val isDarkModeEnabled by viewModel.isDarkModeEnabled.collectAsState()
+    val isStatsOverlayEnabled by viewModel.isStatsOverlayEnabled.collectAsState()
+    val excludedApps by viewModel.excludedApps.collectAsState()
     val selectedDns by viewModel.selectedDns.collectAsState()
+    val dnsError by viewModel.dnsError.collectAsState()
 
     // Refresh state when screen is shown
     LaunchedEffect(Unit) {
@@ -86,11 +95,19 @@ fun SettingsScreen(
                 }
             }
 
+            val overlayPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+                androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+            ) {
+                if (android.provider.Settings.canDrawOverlays(context)) {
+                    viewModel.toggleFpsOverlay(true)
+                }
+            }
+
             // System Privileges Category
             SettingsCategoryCard(title = "System Privileges") {
                 SettingsSwitch(
                     title = "Standard Device Admin",
-                    description = "Basic game boosting using standard background app killing.",
+                    description = "Kills background processes using standard Android APIs. Combine with Ghost Finger for full force-stop.",
                     checked = isDeviceAdmin,
                     onCheckedChange = { enable ->
                         if (enable) {
@@ -141,7 +158,7 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = if (isGhostFingerActive) "ACTIVE: Automated 'Force Stop' clicking is enabled." else "INACTIVE: Alternative to Ultimate Privilege. Enable this to let the app automatically click 'Force Stop' for you.",
+                    text = if (isGhostFingerActive) "ACTIVE: Automated 'Force Stop' clicking is enabled." else "INACTIVE: Recommended for all users. Enables Greenify-style force-stop of background apps without needing ADB.",
                     color = if (isGhostFingerActive) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -158,7 +175,7 @@ fun SettingsScreen(
             SettingsCategoryCard(title = "Performance") {
                 SettingsSwitch(
                     title = "Aggressive App Freezing",
-                    description = "Suspends all background apps to free RAM when game is launched.",
+                    description = "Force-stops all background apps to free RAM when a game is launched.",
                     checked = isAggressiveFreezingEnabled,
                     onCheckedChange = { viewModel.toggleAggressiveFreezing(it) }
                 )
@@ -173,7 +190,7 @@ fun SettingsScreen(
 
                 SettingsSwitch(
                     title = "Battery Profile",
-                    description = "Disables battery saver and optimizes power for gaming.",
+                    description = "Attempts to disable battery saver mode during gameplay for consistent performance.",
                     checked = isBatteryProfileEnabled,
                     onCheckedChange = { viewModel.toggleBatteryProfile(it) }
                 )
@@ -197,7 +214,7 @@ fun SettingsScreen(
             SettingsCategoryCard(title = "Connectivity") {
                 SettingsSwitch(
                     title = "Network Boost",
-                    description = "Optimizes WiFi and disables background data for lower latency.",
+                    description = "Disables background sync and enables WiFi verbose logging to reduce network contention.",
                     checked = isNetworkBoostEnabled,
                     onCheckedChange = { viewModel.toggleNetworkBoost(it) }
                 )
@@ -280,6 +297,14 @@ fun SettingsScreen(
                         }
                     }
                 }
+                if (dnsError != null) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = dnsError ?: "",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             }
 
             // Game Mode Features Category
@@ -302,14 +327,31 @@ fun SettingsScreen(
                     title = "Auto-Start Game Mode",
                     description = "Automatically activates game mode when you launch a game.",
                     checked = isAutoStartEnabled,
-                    onCheckedChange = { viewModel.toggleAutoStart(it) }
+                    onCheckedChange = { enable ->
+                        viewModel.toggleAutoStart(enable)
+                        val monitorIntent = android.content.Intent(context, com.campbell.xgm.domain.services.GameLaunchMonitorService::class.java)
+                        if (enable) {
+                            context.startForegroundService(monitorIntent)
+                        } else {
+                            context.stopService(monitorIntent)
+                        }
+                    }
                 )
 
                 SettingsSwitch(
                     title = "FPS Overlay",
                     description = "Shows real-time frame rate on screen during gameplay.",
                     checked = isFpsOverlayEnabled,
-                    onCheckedChange = { viewModel.toggleFpsOverlay(it) }
+                    onCheckedChange = { enable ->
+                        if (enable && !android.provider.Settings.canDrawOverlays(context)) {
+                            val intent = android.content.Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
+                                data = "package:${context.packageName}".toUri()
+                            }
+                            overlayPermissionLauncher.launch(intent)
+                        } else {
+                            viewModel.toggleFpsOverlay(enable)
+                        }
+                    }
                 )
 
                 SettingsSwitch(
@@ -345,44 +387,89 @@ fun SettingsScreen(
                 )
             }
 
+            // Appearance Category
+            SettingsCategoryCard(title = "Appearance") {
+                SettingsSwitch(
+                    title = "Dark Mode",
+                    description = "Use dark theme throughout the app. Disable for light theme.",
+                    checked = isDarkModeEnabled,
+                    onCheckedChange = { viewModel.toggleDarkMode(it) }
+                )
+            }
+
+            // Overlays Category
+            SettingsCategoryCard(title = "Overlays") {
+                val context = androidx.compose.ui.platform.LocalContext.current
+
+                SettingsSwitch(
+                    title = "System Stats Overlay",
+                    description = "Floating overlay showing live RAM, CPU, and Battery usage during gaming.",
+                    checked = isStatsOverlayEnabled,
+                    onCheckedChange = { enable ->
+                        viewModel.toggleStatsOverlay(enable)
+                        if (enable) {
+                            if (android.provider.Settings.canDrawOverlays(context)) {
+                                val intent = android.content.Intent(context, com.campbell.xgm.domain.services.StatsOverlayService::class.java)
+                                context.startForegroundService(intent)
+                            }
+                        } else {
+                            val intent = android.content.Intent(context, com.campbell.xgm.domain.services.StatsOverlayService::class.java)
+                            intent.action = "STOP_STATS_OVERLAY"
+                            context.startService(intent)
+                        }
+                    }
+                )
+            }
+
+            // Exclusion List Category
+            SettingsCategoryCard(title = "App Exclusion List") {
+                Text(
+                    text = "These apps will never be frozen, killed, or suspended during Game Mode. Tap to manage.",
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                val context = androidx.compose.ui.platform.LocalContext.current
+                var showExclusionDialog by remember { mutableStateOf(false) }
+
+                AlienButton(
+                    text = if (excludedApps.isEmpty()) "Manage Exclusions" else "Manage Exclusions (${excludedApps.size})",
+                    onClick = { showExclusionDialog = true }
+                )
+
+                if (showExclusionDialog) {
+                    ExclusionListDialog(
+                        excludedPackages = excludedApps,
+                        onDismiss = { showExclusionDialog = false },
+                        onConfirm = { viewModel.setExcludedApps(it) }
+                    )
+                }
+            }
+
             // Pro Features Category
             SettingsCategoryCard(
-                title = "Pro Features",
-                headerExtra = {
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f)
-                    ) {
-                        Text(
-                            text = "PREMIUM",
-                            color = MaterialTheme.colorScheme.secondary,
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
+                title = "Advanced Features",
             ) {
                 SettingsSwitch(
                     title = "Individual Game Profiles",
-                    description = "Apply specific engine settings per game. (Upgrade to unlock)",
-                    checked = false,
+                    description = "Apply specific engine settings per game. Configure from each game's profile button on the Dashboard.",
+                    checked = true,
                     onCheckedChange = {},
                     isEnabled = false
                 )
 
                 SettingsSwitch(
                     title = "Real-Time Hardware HUD",
-                    description = "Floating widget with live RAM, CPU, and Battery stats. (Upgrade to unlock)",
-                    checked = false,
+                    description = "Floating overlay with live RAM, CPU, and Battery stats. Enable in the Overlays category above.",
+                    checked = isStatsOverlayEnabled,
                     onCheckedChange = {},
                     isEnabled = false
                 )
 
                 SettingsSwitch(
                     title = "Custom Crosshair Overlay",
-                    description = "Draws a customizable aiming reticle for FPS games. (Upgrade to unlock)",
+                    description = "Draws a customizable aiming reticle for FPS games. (Coming soon)",
                     checked = false,
                     onCheckedChange = {},
                     isEnabled = false
@@ -477,4 +564,117 @@ fun SettingsSwitch(
             )
         )
     }
+}
+
+@Composable
+fun ExclusionListDialog(
+    excludedPackages: Set<String>,
+    onDismiss: () -> Unit,
+    onConfirm: (Set<String>) -> Unit
+) {
+    val context = LocalContext.current
+    var currentExcluded by remember { mutableStateOf(excludedPackages) }
+    var searchQuery by remember { mutableStateOf("") }
+
+    val installedApps = remember {
+        val pm = context.packageManager
+        pm.getInstalledApplications(PackageManager.GET_META_DATA)
+            .filter { pm.getLaunchIntentForPackage(it.packageName) != null }
+            .map { app ->
+                Triple(
+                    app.packageName,
+                    pm.getApplicationLabel(app).toString(),
+                    pm.getApplicationIcon(app)
+                )
+            }
+            .sortedBy { it.second }
+    }
+
+    val filteredApps = remember(searchQuery, installedApps) {
+        if (searchQuery.isBlank()) installedApps
+        else installedApps.filter {
+            it.second.contains(searchQuery, ignoreCase = true) ||
+                    it.first.contains(searchQuery, ignoreCase = true)
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surface,
+        title = {
+            Text(
+                text = "Excluded Apps (${currentExcluded.size})",
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(modifier = Modifier.fillMaxHeight(0.7f)) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    label = { Text("Search apps...") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.secondary,
+                        cursorColor = MaterialTheme.colorScheme.secondary
+                    )
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                LazyColumn(modifier = Modifier.weight(1f)) {
+                    items(filteredApps) { (pkg, name, icon) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    currentExcluded = if (pkg in currentExcluded) {
+                                        currentExcluded - pkg
+                                    } else {
+                                        currentExcluded + pkg
+                                    }
+                                }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = pkg in currentExcluded,
+                                onCheckedChange = { checked ->
+                                    currentExcluded = if (checked) {
+                                        currentExcluded + pkg
+                                    } else {
+                                        currentExcluded - pkg
+                                    }
+                                },
+                                colors = CheckboxDefaults.colors(
+                                    checkedColor = MaterialTheme.colorScheme.secondary
+                                )
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = name,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                text = pkg,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            AlienButton(text = "Save", onClick = {
+                onConfirm(currentExcluded)
+                onDismiss()
+            })
+        },
+        dismissButton = {
+            AlienButton(text = "Cancel", onClick = onDismiss)
+        }
+    )
 }

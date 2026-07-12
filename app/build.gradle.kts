@@ -13,8 +13,17 @@ android {
         applicationId = "com.campbell.xgm"
         minSdk = 29
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 4
+        versionName = "1.3.0"
+    }
+
+    signingConfigs {
+        create("release") {
+            storeFile = file("release-key.jks")
+            storePassword = "campbellxgm123"
+            keyAlias = "campbellxgm"
+            keyPassword = "campbellxgm123"
+        }
     }
 
     buildTypes {
@@ -22,6 +31,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {

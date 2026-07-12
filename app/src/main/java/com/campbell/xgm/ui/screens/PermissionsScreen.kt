@@ -34,6 +34,7 @@ fun PermissionsScreen(
     val hasNotifications by viewModel.hasNotifications.collectAsState()
     val hasWriteSettings by viewModel.hasWriteSettings.collectAsState()
     val hasAccessibility by viewModel.hasAccessibility.collectAsState()
+    val hasUsageStats by viewModel.hasUsageStats.collectAsState()
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -48,8 +49,9 @@ fun PermissionsScreen(
         }
     }
 
-    LaunchedEffect(hasAdmin, hasDnd, hasNotifications, hasWriteSettings, hasAccessibility) {
-        if (hasAdmin && hasDnd && hasNotifications && hasWriteSettings && hasAccessibility) {
+    LaunchedEffect(hasAdmin, hasDnd, hasNotifications, hasWriteSettings, hasAccessibility, hasUsageStats) {
+        if (hasAdmin && hasDnd && hasNotifications && hasWriteSettings && hasAccessibility && hasUsageStats) {
+            kotlinx.coroutines.delay(500)
             onPermissionsGranted()
         }
     }
@@ -85,7 +87,7 @@ fun PermissionsScreen(
             }
             PermissionItem(
                 title = "Device Admin",
-                description = "Allows the engine to aggressively freeze background processes.",
+                description = "Combined with Accessibility, this enables aggressive force-stopping of background processes.",
                 isGranted = hasAdmin,
                 onGrantClick = {
                     val component = android.content.ComponentName(context, com.campbell.xgm.domain.services.CampbellAdminReceiver::class.java)
@@ -152,6 +154,18 @@ fun PermissionsScreen(
                 isGranted = hasAccessibility,
                 onGrantClick = {
                     val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                    context.startActivity(intent)
+                }
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            PermissionItem(
+                title = "Usage Access",
+                description = "Required to detect when you leave a game and auto-restore system settings.",
+                isGranted = hasUsageStats,
+                onGrantClick = {
+                    val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
                     context.startActivity(intent)
                 }
             )

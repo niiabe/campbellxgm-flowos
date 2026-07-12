@@ -4,15 +4,24 @@ import android.content.Intent
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
 import android.util.Log
+import kotlinx.coroutines.*
+import java.net.DatagramPacket
+import java.net.DatagramSocket
+import java.net.InetAddress
+import java.net.Socket
 
 class PingStabilizerVpnService : VpnService() {
 
     private var vpnInterface: ParcelFileDescriptor? = null
+    private val serviceJob = SupervisorJob()
+    private val serviceScope = CoroutineScope(Dispatchers.IO + serviceJob)
+    private var keepaliveJob: Job? = null
 
     companion object {
         const val ACTION_START_VPN = "com.campbell.xgm.START_VPN"
         const val ACTION_STOP_VPN = "com.campbell.xgm.STOP_VPN"
         const val EXTRA_TARGET_PACKAGE = "target_package"
+        private const val KEEPALIVE_INTERVAL_MS = 3000L
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -47,28 +56,19 @@ class PingStabilizerVpnService : VpnService() {
             val builder = Builder()
                 .setSession("CampbellXGM Ping Stabilizer")
                 .setMtu(1500)
-                // Use a dummy address - this is a per-app VPN for keepalive only
                 .addAddress("10.0.0.2", 32)
-                // Only route specific traffic needed for keepalive
                 .addRoute("0.0.0.0", 0)
-                
-                // Exclude the game and our own app - they use real network
                 .addDisallowedApplication(targetPackage)
                 .addDisallowedApplication(packageName)
-                // Also exclude system apps to prevent breaking phone functionality
-                .addDisallowedApplication("com.android.settings")
-                .addDisallowedApplication("com.android.systemui")
-                .addDisallowedApplication("com.google.android.gms")
-                .addDisallowedApplication("com.android.phone")
-                .addDisallowedApplication("com.android.server.telecom")
 
-            // Allow bypass for critical system traffic
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
                 builder.setMetered(false)
             }
 
             vpnInterface = builder.establish()
             Log.i("PingStabilizer", "Ping Stabilizer VPN established")
+
+            startKeepaliveLoop()
         } catch (e: Exception) {
             Log.e("PingStabilizer", "Failed to establish VPN: ${e.message}")
             stopSelf()
@@ -78,6 +78,8 @@ class PingStabilizerVpnService : VpnService() {
     private fun stopVpn() {
         Log.i("PingStabilizer", "Stopping Ping Stabilizer VPN")
         try {
+            keepaliveJob?.cancel()
+            keepaliveJob = null
             vpnInterface?.close()
             vpnInterface = null
         } catch (e: Exception) {
@@ -87,6 +89,34 @@ class PingStabilizerVpnService : VpnService() {
 
     override fun onDestroy() {
         stopVpn()
+        serviceJob.cancel()
         super.onDestroy()
+    }
+
+    private fun startKeepaliveLoop() {
+        keepaliveJob = serviceScope.launch {
+            var socket: DatagramSocket? = null
+            try {
+                val address = InetAddress.getByName("8.8.8.8")
+                val sendData = byteArrayOf(0x00) // Minimal keepalive payload
+                socket = DatagramSocket()
+                socket.soTimeout = 3000
+                protect(socket)
+
+                while (isActive) {
+                    try {
+                        val packet = DatagramPacket(sendData, sendData.size, address, 53)
+                        socket.send(packet)
+                    } catch (e: Exception) {
+                        Log.e("PingStabilizer", "Keepalive failed: ${e.message}")
+                    }
+                    delay(KEEPALIVE_INTERVAL_MS)
+                }
+            } catch (e: Exception) {
+                Log.e("PingStabilizer", "Keepalive loop error: ${e.message}")
+            } finally {
+                socket?.close()
+            }
+        }
     }
 }
