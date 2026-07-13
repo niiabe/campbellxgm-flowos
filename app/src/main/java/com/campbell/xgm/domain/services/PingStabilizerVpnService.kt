@@ -1,9 +1,15 @@
 package com.campbell.xgm.domain.services
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.Context
 import android.content.Intent
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
 import android.util.Log
+import androidx.core.app.NotificationCompat
+import com.campbell.xgm.R
 import kotlinx.coroutines.*
 import java.net.DatagramPacket
 import java.net.DatagramSocket
@@ -22,6 +28,8 @@ class PingStabilizerVpnService : VpnService() {
         const val ACTION_STOP_VPN = "com.campbell.xgm.STOP_VPN"
         const val EXTRA_TARGET_PACKAGE = "target_package"
         private const val KEEPALIVE_INTERVAL_MS = 3000L
+        private const val CHANNEL_ID = "campbellxgm_ping_vpn_channel"
+        private const val NOTIFICATION_ID = 9004
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -68,6 +76,7 @@ class PingStabilizerVpnService : VpnService() {
             vpnInterface = builder.establish()
             Log.i("PingStabilizer", "Ping Stabilizer VPN established")
 
+            startForegroundNotification()
             startKeepaliveLoop()
         } catch (e: Exception) {
             Log.e("PingStabilizer", "Failed to establish VPN: ${e.message}")
@@ -91,6 +100,29 @@ class PingStabilizerVpnService : VpnService() {
         stopVpn()
         serviceJob.cancel()
         super.onDestroy()
+    }
+
+    private fun startForegroundNotification() {
+        try {
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "Ping Stabilizer",
+                NotificationManager.IMPORTANCE_LOW
+            )
+            notificationManager.createNotificationChannel(channel)
+
+            val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle("Ping Stabilizer Active")
+                .setContentText("Keeping your connection alive during gameplay.")
+                .setSmallIcon(R.drawable.logo)
+                .setOngoing(true)
+                .build()
+
+            startForeground(NOTIFICATION_ID, notification)
+        } catch (e: Exception) {
+            Log.e("PingStabilizer", "Failed to start foreground notification: ${e.message}")
+        }
     }
 
     private fun startKeepaliveLoop() {

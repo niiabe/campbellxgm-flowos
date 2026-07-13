@@ -1,11 +1,9 @@
 package com.campbell.xgm.domain.services
 
-import android.app.ActivityManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
-import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -17,6 +15,7 @@ import android.view.WindowManager
 import android.widget.TextView
 import androidx.core.app.NotificationCompat
 import com.campbell.xgm.R
+import com.campbell.xgm.util.ForegroundAppDetector
 import kotlinx.coroutines.*
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -26,7 +25,7 @@ class FpsOverlayService : Service() {
     companion object {
         private const val CHANNEL_ID = "campbellxgm_fps_channel"
         private const val NOTIFICATION_ID = 9002
-        private const val FPS_POLL_INTERVAL_MS = 1000L
+        private const val FPS_POLL_INTERVAL_MS = 3000L
     }
 
     private var windowManager: WindowManager? = null
@@ -34,7 +33,8 @@ class FpsOverlayService : Service() {
     private val serviceJob = SupervisorJob()
     private val serviceScope = CoroutineScope(Dispatchers.IO + serviceJob)
     private var fpsPollJob: Job? = null
-    private var lastFrameCount: Long = 0
+    // Per-package frame-count baseline so FPS delta is computed within a single process.
+    private val frameBaselines = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
     override fun onCreate() {
         super.onCreate()
@@ -106,8 +106,7 @@ class FpsOverlayService : Service() {
     }
 
     private fun measureGameFps(): Int {
-        // Try to get the foreground app's total frame count from dumpsys gfxinfo
-        val foregroundPkg = getForegroundPackage() ?: return -1
+        val foregroundPkg = ForegroundAppDetector.getForegroundPackage(this) ?: return -1
         return try {
             val process = Runtime.getRuntime().exec(arrayOf("dumpsys", "gfxinfo", foregroundPkg))
             val reader = BufferedReader(InputStreamReader(process.inputStream))
@@ -128,8 +127,9 @@ class FpsOverlayService : Service() {
             process.waitFor()
 
             if (totalFrames > 0) {
-                val delta = totalFrames - lastFrameCount
-                lastFrameCount = totalFrames
+                val prev = frameBaselines[foregroundPkg] ?: 0L
+                val delta = (totalFrames - prev).coerceAtLeast(0)
+                frameBaselines[foregroundPkg] = totalFrames
                 // Return delta as approximate FPS (frames rendered in last second)
                 delta.toInt().coerceIn(0, 240)
             } else {
@@ -138,26 +138,6 @@ class FpsOverlayService : Service() {
         } catch (e: Exception) {
             Log.d("FpsOverlayService", "dumpsys gfxinfo unavailable: ${e.message}")
             -1
-        }
-    }
-
-    private fun getForegroundPackage(): String? {
-        return try {
-            val usm = getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager ?: return null
-            val now = System.currentTimeMillis()
-            val events = usm.queryEvents(now - 5_000, now)
-            var lastForeground: String? = null
-            val event = android.app.usage.UsageEvents.Event()
-            while (events.hasNextEvent()) {
-                events.getNextEvent(event)
-                @Suppress("DEPRECATION")
-                if (event.eventType == android.app.usage.UsageEvents.Event.MOVE_TO_FOREGROUND) {
-                    lastForeground = event.packageName
-                }
-            }
-            lastForeground
-        } catch (e: Exception) {
-            null
         }
     }
 

@@ -5,12 +5,12 @@ import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.os.Build
-import android.os.Environment
 import android.provider.Settings
 import android.util.Log
 import androidx.core.content.edit
 import androidx.lifecycle.AndroidViewModel
 import com.campbell.xgm.domain.services.CampbellAdminReceiver
+import com.campbell.xgm.util.FileUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -68,6 +68,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _isNotificationFilterEnabled = MutableStateFlow(sharedPreferences.getBoolean("notification_filter", false))
     val isNotificationFilterEnabled: StateFlow<Boolean> = _isNotificationFilterEnabled
 
+    // Ghost Finger (Accessibility force-stop) — OFF by default because it opens each
+    // app's Settings > Force Stop page and hijacks the screen during gameplay.
+    private val _isGhostFingerEnabled = MutableStateFlow(sharedPreferences.getBoolean("accessibility_force_stop", false))
+    val isGhostFingerEnabled: StateFlow<Boolean> = _isGhostFingerEnabled
+
     private val _isCooldownEnabled = MutableStateFlow(sharedPreferences.getBoolean("cooldown_mode", true))
     val isCooldownEnabled: StateFlow<Boolean> = _isCooldownEnabled
 
@@ -108,6 +113,21 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     // Standard Admin State
     private val _isDeviceAdmin = MutableStateFlow(dpm.isAdminActive(adminComponent))
     val isDeviceAdmin: StateFlow<Boolean> = _isDeviceAdmin
+
+    // Root State (features like CPU Tuner / Cooldown / Network Boost need DO or root to fully work)
+    private val _isRooted = MutableStateFlow(isDeviceRooted())
+    val isRooted: StateFlow<Boolean> = _isRooted
+
+    private fun isDeviceRooted(): Boolean {
+        return try {
+            Runtime.getRuntime().exec(arrayOf("su", "-c", "echo rooted")).waitFor() == 0
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /** True when the feature can actually take effect on this device. */
+    fun hasFullSystemPrivileges(): Boolean = _isDeviceOwner.value || _isRooted.value
 
     // Toggle functions
     fun toggleAggressiveFreezing(enabled: Boolean) {
@@ -165,6 +185,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         _isNotificationFilterEnabled.value = enabled
     }
 
+    fun toggleGhostFinger(enabled: Boolean) {
+        sharedPreferences.edit { putBoolean("accessibility_force_stop", enabled) }
+        _isGhostFingerEnabled.value = enabled
+    }
+
     fun toggleCooldown(enabled: Boolean) {
         sharedPreferences.edit { putBoolean("cooldown_mode", enabled) }
         _isCooldownEnabled.value = enabled
@@ -189,10 +214,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         try {
             val context = getApplication<Application>()
             val cacheDir = context.cacheDir
-            val appCacheSize = getDirSize(cacheDir)
+            val appCacheSize = FileUtils.getDirSize(cacheDir)
             
             val packageContext = context.createPackageContext(packageName, 0)
-            val packageCacheSize = getDirSize(packageContext.cacheDir)
+            val packageCacheSize = FileUtils.getDirSize(packageContext.cacheDir)
             
             val totalSize = appCacheSize + packageCacheSize
             formatSize(totalSize)
@@ -206,16 +231,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             val context = getApplication<Application>()
             val beforeSize = getCacheSize(packageName)
             
-            // Clear app cache
-            deleteDir(context.cacheDir)
+            FileUtils.deleteDir(context.cacheDir)
             
-            // Clear target package cache
             try {
                 val packageContext = context.createPackageContext(packageName, 0)
-                deleteDir(packageContext.cacheDir)
+                FileUtils.deleteDir(packageContext.cacheDir)
             } catch (_: Exception) {}
             
-            // Clear temp files
             clearTempFiles()
             
             val afterSize = getCacheSize(packageName)
@@ -227,30 +249,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    private suspend fun getDirSize(dir: File?): Long = withContext(Dispatchers.IO) {
-        if (dir == null || !dir.exists()) return@withContext 0L
-        var size = 0L
-        val files = dir.listFiles() ?: return@withContext 0L
-        for (file in files) {
-            size += if (file.isDirectory) getDirSize(file) else file.length()
-        }
-        size
-    }
-
-    private suspend fun deleteDir(dir: File?): Boolean = withContext(Dispatchers.IO) {
-        if (dir == null || !dir.exists()) return@withContext false
-        if (dir.isDirectory) {
-            dir.listFiles()?.forEach { deleteDir(it) }
-        }
-        dir.delete()
-    }
-
     private suspend fun clearTempFiles() = withContext(Dispatchers.IO) {
         try {
-            // Only clear app-specific temp files, NOT system directories
             val tempDir = File(getApplication<Application>().cacheDir, "temp")
             if (tempDir.exists()) {
-                deleteDir(tempDir)
+                FileUtils.deleteDir(tempDir)
             }
         } catch (_: Exception) {}
     }
@@ -281,29 +284,42 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
 
     private fun applyDnsSettings(provider: DnsProvider) {
+        val app = getApplication<Application>()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             try {
-                if (dpm.isDeviceOwnerApp(getApplication<Application>().packageName)) {
+                if (dpm.isDeviceOwnerApp(app.packageName)) {
                     if (provider == DnsProvider.SYSTEM_DEFAULT) {
                         dpm.setGlobalSetting(adminComponent, "private_dns_mode", "off")
                     } else {
+                        val sanitizedHostname = provider.hostname.take(255)
                         dpm.setGlobalSetting(adminComponent, "private_dns_mode", "hostname")
-                        dpm.setGlobalSetting(adminComponent, "private_dns_specifier", provider.hostname)
+                        dpm.setGlobalSetting(adminComponent, "private_dns_specifier", sanitizedHostname)
                     }
                     _dnsError.value = null
                 } else {
-                    val contentResolver = getApplication<Application>().contentResolver
+                    val hasWriteSecure = try {
+                        Settings.System.putString(app.contentResolver, "secure_settings_check", null)
+                        true
+                    } catch (_: SecurityException) {
+                        false
+                    }
+                    if (!hasWriteSecure) {
+                        _dnsError.value = "DNS change requires Device Owner or WRITE_SECURE_SETTINGS (ADB)"
+                        return
+                    }
+                    val contentResolver = app.contentResolver
                     if (provider == DnsProvider.SYSTEM_DEFAULT) {
                         Settings.Global.putString(contentResolver, "private_dns_mode", "off")
                     } else {
+                        val sanitizedHostname = provider.hostname.take(255)
                         Settings.Global.putString(contentResolver, "private_dns_mode", "hostname")
-                        Settings.Global.putString(contentResolver, "private_dns_specifier", provider.hostname)
+                        Settings.Global.putString(contentResolver, "private_dns_specifier", sanitizedHostname)
                     }
                     _dnsError.value = null
                 }
             } catch (e: SecurityException) {
                 _dnsError.value = "DNS change requires Device Owner or WRITE_SECURE_SETTINGS (ADB)"
-                android.util.Log.e("SettingsViewModel", "Failed to apply DNS settings (Requires Device Owner or WRITE_SECURE_SETTINGS via ADB): ${e.message}")
+                Log.e("SettingsViewModel", "Failed to apply DNS settings: ${e.message}")
             }
         }
     }

@@ -11,16 +11,16 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
-import android.app.usage.UsageStatsManager
 import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.campbell.xgm.R
+import com.campbell.xgm.util.FileUtils
+import com.campbell.xgm.util.ForegroundAppDetector
 import kotlinx.coroutines.*
 import java.io.File
 
@@ -35,6 +35,49 @@ class PipelineService : Service() {
 
         @Volatile var activeTargetPackage: String? = null
             private set
+
+        fun restorePersistedState(context: android.content.Context) {
+            val prefs = context.getSharedPreferences("game_mode_prefs", Context.MODE_PRIVATE)
+            val dndFilter = prefs.getInt("orig_dnd_filter", -1)
+            if (dndFilter != -1) {
+                try {
+                    val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                    if (nm.isNotificationPolicyAccessGranted) {
+                        nm.setInterruptionFilter(dndFilter)
+                    }
+                } catch (_: Exception) {}
+                prefs.edit().remove("orig_dnd_filter").apply()
+            }
+
+            val brightnessMode = prefs.getInt("orig_brightness_mode", -1)
+            if (brightnessMode != -1) {
+                try {
+                    android.provider.Settings.System.putInt(
+                        context.contentResolver,
+                        android.provider.Settings.System.SCREEN_BRIGHTNESS_MODE,
+                        brightnessMode
+                    )
+                } catch (_: Exception) {}
+                prefs.edit().remove("orig_brightness_mode").apply()
+            }
+
+            val cpuGovernor = prefs.getString("orig_cpu_governor", null)
+            if (cpuGovernor != null) {
+                try {
+                    val cpuFile = File("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor")
+                    if (cpuFile.exists() && cpuFile.canWrite()) {
+                        cpuFile.writeText(cpuGovernor)
+                    }
+                } catch (_: Exception) {}
+                prefs.edit().remove("orig_cpu_governor").apply()
+            }
+
+            prefs.edit()
+                .remove("orig_cpu_max_freq")
+                .remove("orig_wifi_verbosity")
+                .remove("orig_sync_state")
+                .apply()
+        }
     }
 
     // State Tracking — all @Volatile to ensure visibility across threads
@@ -150,6 +193,11 @@ class PipelineService : Service() {
         "com.google.android.printservice.recommendation"
     )
 
+    override fun onCreate() {
+        super.onCreate()
+        restorePersistedState(this)
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
         if (action == "STOP_GAME_MODE") {
@@ -162,7 +210,6 @@ class PipelineService : Service() {
             return START_NOT_STICKY
         }
 
-        // Always start foreground first to prevent ForegroundServiceStartNotAllowedException
         val targetPackage = intent?.getStringExtra("TARGET_PACKAGE")
         val gameName = if (targetPackage != null) {
             try { packageManager.getApplicationLabel(packageManager.getApplicationInfo(targetPackage, 0)).toString() }
@@ -214,11 +261,13 @@ class PipelineService : Service() {
     private fun executeAppPipeline(targetPackage: String) {
         val prefs = getSharedPreferences("game_mode_prefs", Context.MODE_PRIVATE)
 
-        // Check for per-game profile first, fall back to global settings
+        // Check for per-game profile first, fall back to global settings.
+        // Parse the JSON once and reuse it for every lookup below.
         val profileJson = getSharedPreferences("game_profiles", MODE_PRIVATE).getString(targetPackage, null)
+        val profileObj = try { profileJson?.let { org.json.JSONObject(it) } } catch (_: Exception) { null }
         fun profileBool(key: String, globalKey: String, default: Boolean): Boolean {
-            if (profileJson != null) {
-                try { return org.json.JSONObject(profileJson).optBoolean(key, prefs.getBoolean(globalKey, default)) }
+            if (profileObj != null) {
+                try { return profileObj.optBoolean(key, prefs.getBoolean(globalKey, default)) }
                 catch (_: Exception) {}
             }
             return prefs.getBoolean(globalKey, default)
@@ -243,75 +292,65 @@ class PipelineService : Service() {
         val isDeviceOwner = dpm.isDeviceOwnerApp(packageName)
         val isDeviceAdmin = dpm.isAdminActive(adminComponent)
 
-        // Storage Cleaner - Clear cache before launching
-        if (isStorageCleanerEnabled) {
-            clearGameCache(targetPackage)
-        }
-
-        // FPS Overlay
-        if (isFpsOverlayEnabled && Settings.canDrawOverlays(this)) {
-            val fpsIntent = Intent(this, FpsOverlayService::class.java)
-            startService(fpsIntent)
-        }
-
-        // Stats Overlay (RAM/CPU/Battery)
-        if (isStatsOverlayEnabled && Settings.canDrawOverlays(this)) {
-            val statsIntent = Intent(this, StatsOverlayService::class.java)
-            startForegroundService(statsIntent)
-        }
-
-        // Keep Screen Awake
-        if (isKeepScreenAwakeEnabled) {
-            enableKeepScreenAwake()
-        }
-
-        // Auto-Brightness Lock
-        if (isAutoBrightnessLockEnabled) {
-            enableAutoBrightnessLock()
-        }
-
-        // Notification Filter
-        if (isNotificationFilterEnabled) {
-            enableNotificationFilter()
-        }
-
-        // DND
-        if (isDndEnabled) {
-            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            if (notificationManager.isNotificationPolicyAccessGranted) {
-                originalDndFilter = notificationManager.currentInterruptionFilter
-                notificationManager.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_PRIORITY)
-                isDndRestored = false
-            } else {
-                Log.w("PipelineService", "DND enabled but policy access not granted!")
+        serviceScope.launch {
+            coroutineScope {
+                launch {
+                    if (isStorageCleanerEnabled) clearGameCache(targetPackage)
+                }
+                launch {
+                    if (isFpsOverlayEnabled && Settings.canDrawOverlays(this@PipelineService)) {
+                        startService(Intent(this@PipelineService, FpsOverlayService::class.java))
+                    }
+                }
+                launch {
+                    if (isStatsOverlayEnabled && Settings.canDrawOverlays(this@PipelineService)) {
+                        startForegroundService(Intent(this@PipelineService, StatsOverlayService::class.java))
+                    }
+                }
+                launch {
+                    if (isKeepScreenAwakeEnabled) enableKeepScreenAwake()
+                }
+                launch {
+                    if (isAutoBrightnessLockEnabled) enableAutoBrightnessLock()
+                }
+                launch {
+                    if (isNotificationFilterEnabled) enableNotificationFilter()
+                }
+                launch {
+                    if (isDndEnabled) {
+                        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                        if (notificationManager.isNotificationPolicyAccessGranted) {
+                            originalDndFilter = notificationManager.currentInterruptionFilter
+                            getSharedPreferences("game_mode_prefs", Context.MODE_PRIVATE).edit()
+                                .putInt("orig_dnd_filter", originalDndFilter).apply()
+                            notificationManager.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_PRIORITY)
+                            isDndRestored = false
+                        } else {
+                            Log.w("PipelineService", "DND enabled but policy access not granted!")
+                        }
+                    }
+                }
+                launch {
+                    if (isNetworkBoostEnabled) enableNetworkBoost()
+                }
+                launch {
+                    if (isBatteryProfileEnabled) enableBatteryProfile()
+                }
+                launch {
+                    if (isCpuTunerEnabled && isDeviceOwner) enableCpuTuner()
+                }
             }
-        }
 
-        // Network Boost
-        if (isNetworkBoostEnabled) {
-            enableNetworkBoost()
-        }
+            if (isAggressiveFreezingEnabled) {
+                val rawAppsToFreeze = withContext(Dispatchers.IO) { getFreezableApps(targetPackage) }
+                // Never freeze apps that are actively playing media (music/streaming) — otherwise
+                // game mode would kill the user's audio. Re-checked inside startPeriodicFreezing too.
+                val mediaPackages = com.campbell.xgm.util.MediaUtils.getActiveMediaPackages(this@PipelineService)
+                val appsToFreeze = rawAppsToFreeze.filter { it !in mediaPackages }
+                Log.i("PipelineService", "Found ${rawAppsToFreeze.size} apps to freeze (${appsToFreeze.size} after excluding ${mediaPackages.size} media)")
 
-        // Battery Profile
-        if (isBatteryProfileEnabled) {
-            enableBatteryProfile()
-        }
-
-        // CPU Tuner (Device Owner only)
-        if (isCpuTunerEnabled && isDeviceOwner) {
-            enableCpuTuner()
-        }
-
-        // Freezing — layered approach: each tier stacks on top of the previous
-        if (isAggressiveFreezingEnabled) {
-            serviceScope.launch {
-                val appsToFreeze = withContext(Dispatchers.IO) { getFreezableApps(targetPackage) }
-                Log.i("PipelineService", "Found ${appsToFreeze.size} apps to freeze")
-
-                // Layer 1: Instant best-effort kill via ActivityManager (works without any special privileges)
                 killBackgroundProcesses(appsToFreeze)
 
-                // Layer 2: Device Owner — suspend packages at OS level (total freeze)
                 if (isDeviceOwner) {
                     try {
                         suspendedPackagesList = dpm.setPackagesSuspended(adminComponent, appsToFreeze.toTypedArray(), true)
@@ -322,34 +361,23 @@ class PipelineService : Service() {
                     }
                 }
 
-                // Layer 3: Accessibility — Greenify-style force-stop via automated UI (works for any user with Accessibility enabled)
-                if (SafetyInterceptor.isRunning()) {
+                // Layer 3: Accessibility — Greenify-style force-stop via automated UI.
+                // Gated behind an explicit opt-in pref (default OFF): this opens each app's
+                // Settings page and hijacks the screen, so it must never run unless enabled.
+                val ghostFingerEnabled = prefs.getBoolean("accessibility_force_stop", false)
+                if (ghostFingerEnabled && SafetyInterceptor.isRunning()) {
                     Log.i("PipelineService", "Triggering Accessibility Ghost Finger for thorough force-stop")
-                    val safetyService = SafetyInterceptor.instance
-                    safetyService?.forceStopApps(appsToFreeze.toList())
+                    SafetyInterceptor.instance?.forceStopApps(appsToFreeze.toList())
                 }
 
-                // Layer 4: Periodic re-killing to catch apps that restart
                 startPeriodicFreezing(appsToFreeze)
 
-                // Cooldown monitoring
-                if (isCooldownEnabled) {
-                    startCooldownMonitoring()
-                }
-
-                // Auto-teardown monitoring — detect when user leaves game
+                if (isCooldownEnabled) startCooldownMonitoring()
                 startAutoTeardownMonitoring()
-
-                launchGame(targetPackage)
+            } else {
+                if (isCooldownEnabled) startCooldownMonitoring()
+                startAutoTeardownMonitoring()
             }
-        } else {
-            // Cooldown monitoring
-            if (isCooldownEnabled) {
-                startCooldownMonitoring()
-            }
-
-            // Auto-teardown monitoring
-            startAutoTeardownMonitoring()
 
             launchGame(targetPackage)
         }
@@ -357,15 +385,16 @@ class PipelineService : Service() {
 
     private fun enableNetworkBoost() {
         try {
-            // Enable WiFi verbose logging for diagnostics
             originalWifiVerbosity = Settings.Global.getInt(contentResolver, "wifi_verbose_logging", 0)
+            getSharedPreferences("game_mode_prefs", Context.MODE_PRIVATE).edit()
+                .putInt("orig_wifi_verbosity", originalWifiVerbosity).apply()
             Settings.Global.putInt(contentResolver, "wifi_verbose_logging", 1)
 
-            // Disable background sync to prioritize network for gaming
             originalSyncState = android.content.ContentResolver.getMasterSyncAutomatically()
+            getSharedPreferences("game_mode_prefs", Context.MODE_PRIVATE).edit()
+                .putBoolean("orig_sync_state", originalSyncState).apply()
             android.content.ContentResolver.setMasterSyncAutomatically(false)
 
-            // Bind process to active network to reduce latency
             val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 val network = connectivityManager.activeNetwork
@@ -375,14 +404,6 @@ class PipelineService : Service() {
                         Log.i("PipelineService", "Network boost active - bound to network with caps: ${caps.linkDownstreamBandwidthKbps}kbps")
                     }
                 }
-            }
-
-            // Restrict background data usage on Android 7+
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                try {
-                    val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-                    cm.isDefaultNetworkActive
-                } catch (_: Exception) {}
             }
 
             isNetworkBoosted = true
@@ -451,6 +472,8 @@ class PipelineService : Service() {
             val cpuFile = File(cpuPath)
             if (cpuFile.exists() && cpuFile.canWrite()) {
                 originalCpuGovernor = cpuFile.readText().trim()
+                getSharedPreferences("game_mode_prefs", Context.MODE_PRIVATE).edit()
+                    .putString("orig_cpu_governor", originalCpuGovernor).apply()
                 cpuFile.writeText("performance")
                 isCpuTuned = true
                 Log.i("PipelineService", "CPU tuner enabled - governor set to performance (was: $originalCpuGovernor)")
@@ -510,8 +533,10 @@ class PipelineService : Service() {
             originalBrightnessMode = Settings.System.getInt(
                 contentResolver,
                 Settings.System.SCREEN_BRIGHTNESS_MODE,
-                1 // Default to auto
+                1
             )
+            getSharedPreferences("game_mode_prefs", Context.MODE_PRIVATE).edit()
+                .putInt("orig_brightness_mode", originalBrightnessMode).apply()
             Settings.System.putInt(
                 contentResolver,
                 Settings.System.SCREEN_BRIGHTNESS_MODE,
@@ -592,7 +617,7 @@ class PipelineService : Service() {
         autoTeardownJob = serviceScope.launch {
             while (isActive) {
                 delay(AUTO_TEARDOWN_CHECK_MS)
-                if (!isForegroundApp(target)) {
+                if (!ForegroundAppDetector.isForeground(this@PipelineService, target)) {
                     Log.i("PipelineService", "User left game ($target) - auto-restoring system state")
                     withContext(Dispatchers.Main) {
                         stopAllOptimizations()
@@ -602,26 +627,6 @@ class PipelineService : Service() {
                     return@launch
                 }
             }
-        }
-    }
-
-    private fun isForegroundApp(targetPackage: String): Boolean {
-        return try {
-            val usageStatsManager = getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager ?: return true
-            val now = System.currentTimeMillis()
-            val events = usageStatsManager.queryEvents(now - 10_000, now)
-            var lastForeground: String? = null
-            val event = android.app.usage.UsageEvents.Event()
-            while (events.hasNextEvent()) {
-                events.getNextEvent(event)
-                @Suppress("DEPRECATION")
-                if (event.eventType == android.app.usage.UsageEvents.Event.MOVE_TO_FOREGROUND) {
-                    lastForeground = event.packageName
-                }
-            }
-            lastForeground == targetPackage || lastForeground == null
-        } catch (e: Exception) {
-            true
         }
     }
 
@@ -642,6 +647,8 @@ class PipelineService : Service() {
                 }
                 if (cpuFile.exists() && cpuFile.canWrite()) {
                     originalCpuMaxFreq = cpuFile.readText().trim()
+                    getSharedPreferences("game_mode_prefs", Context.MODE_PRIVATE).edit()
+                        .putString("orig_cpu_max_freq", originalCpuMaxFreq).apply()
                     val maxFreq = originalCpuMaxFreq?.toLongOrNull()
                     if (maxFreq != null) {
                         val reducedFreq = (maxFreq * 0.7).toLong()
@@ -666,24 +673,6 @@ class PipelineService : Service() {
     }
 
 
-
-    private fun getDirSize(dir: File?): Long {
-        if (dir == null || !dir.exists()) return 0
-        var size = 0L
-        val files = dir.listFiles() ?: return 0
-        for (file in files) {
-            size += if (file.isDirectory) getDirSize(file) else file.length()
-        }
-        return size
-    }
-
-    private fun deleteDir(dir: File?): Boolean {
-        if (dir == null || !dir.exists()) return false
-        if (dir.isDirectory) {
-            dir.listFiles()?.forEach { deleteDir(it) }
-        }
-        return dir.delete()
-    }
 
     private fun launchGame(targetPackage: String) {
         val prefs = getSharedPreferences("game_mode_prefs", Context.MODE_PRIVATE)
@@ -765,7 +754,10 @@ class PipelineService : Service() {
     private fun startPeriodicFreezing(apps: List<String>) {
         freezeJob = serviceScope.launch {
             while (isActive) {
-                killBackgroundProcesses(apps)
+                // Re-check media each cycle so a media app that starts mid-game is protected,
+                // and one that stops playing can be frozen again.
+                val mediaPackages = com.campbell.xgm.util.MediaUtils.getActiveMediaPackages(this@PipelineService)
+                killBackgroundProcesses(apps.filter { it !in mediaPackages })
                 delay(FREEZE_INTERVAL_MS)
             }
         }
@@ -875,14 +867,12 @@ class PipelineService : Service() {
             try {
                 var totalCleared = 0L
 
-                // Clear target package cache (requires Device Owner or root)
                 try {
                     val packageContext = createPackageContext(targetPackage, 0)
                     val packageCacheDir = packageContext.cacheDir
-                    totalCleared += getDirSize(packageCacheDir)
-                    deleteDir(packageCacheDir)
+                    totalCleared += FileUtils.getDirSize(packageCacheDir)
+                    FileUtils.deleteDir(packageCacheDir)
                 } catch (_: Exception) {
-                    // Can't access other app's cache without Device Owner
                 }
 
                 val clearedMB = totalCleared / (1024.0 * 1024.0)

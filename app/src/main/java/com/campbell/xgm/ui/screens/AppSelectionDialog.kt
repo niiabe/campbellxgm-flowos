@@ -1,5 +1,6 @@
 package com.campbell.xgm.ui.screens
 
+import android.graphics.drawable.Drawable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -47,10 +48,14 @@ fun AppSelectionDialog(
                 } else {
                     LazyColumn(modifier = Modifier.weight(1f)) {
                         items(installedApps) { app ->
-                            AppListItem(app = app, onClick = {
-                                onAppSelected(app)
-                                onDismissRequest()
-                            })
+                            AppListItem(
+                                packageName = app.packageName,
+                                appName = app.appName,
+                                onClick = {
+                                    onAppSelected(app)
+                                    onDismissRequest()
+                                }
+                            )
                             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
                         }
                     }
@@ -70,9 +75,15 @@ fun AppSelectionDialog(
 }
 
 @Composable
-fun AppListItem(app: AppInfo, onClick: () -> Unit) {
-    val appBitmap = remember(app.icon) {
-        app.icon?.toBitmap(48, 48)?.asImageBitmap()
+fun AppListItem(packageName: String, appName: String, onClick: () -> Unit) {
+    val context = LocalContext.current
+    val appIcon = remember(packageName) {
+        try {
+            context.packageManager.getApplicationIcon(packageName)
+        } catch (_: Exception) { null }
+    }
+    val appBitmap = remember(appIcon) {
+        appIcon?.toBitmap(44, 44)?.asImageBitmap()
     }
 
     Row(
@@ -85,7 +96,7 @@ fun AppListItem(app: AppInfo, onClick: () -> Unit) {
         appBitmap?.let { bitmap ->
             Image(
                 bitmap = bitmap,
-                contentDescription = app.appName,
+                contentDescription = appName,
                 modifier = Modifier
                     .size(44.dp)
                     .clip(RoundedCornerShape(10.dp))
@@ -94,12 +105,12 @@ fun AppListItem(app: AppInfo, onClick: () -> Unit) {
         }
         Column {
             Text(
-                text = app.appName,
+                text = appName,
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface
             )
             Text(
-                text = app.packageName,
+                text = packageName,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
             )

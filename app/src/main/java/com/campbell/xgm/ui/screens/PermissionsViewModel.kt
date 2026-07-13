@@ -1,18 +1,7 @@
 package com.campbell.xgm.ui.screens
 
-import android.app.AppOpsManager
 import android.app.Application
-import android.app.NotificationManager
-import android.app.admin.DevicePolicyManager
-import android.app.usage.UsageStatsManager
-import android.content.ComponentName
-import android.content.Context
-import android.content.pm.PackageManager
-import android.os.Build
-import android.provider.Settings
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
-import com.campbell.xgm.domain.services.CampbellAdminReceiver
 import com.campbell.xgm.util.PermissionUtils
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -40,34 +29,17 @@ class PermissionsViewModel(application: Application) : AndroidViewModel(applicat
     private val _hasUsageStats = MutableStateFlow(false)
     val hasUsageStats: StateFlow<Boolean> = _hasUsageStats.asStateFlow()
 
+    private val _hasNotificationAccess = MutableStateFlow(false)
+    val hasNotificationAccess: StateFlow<Boolean> = _hasNotificationAccess.asStateFlow()
+
     fun checkPermissions() {
-        val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
-        val adminComponent = ComponentName(context, CampbellAdminReceiver::class.java)
-        _hasAdmin.value = dpm.isAdminActive(adminComponent)
-
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        _hasDnd.value = notificationManager.isNotificationPolicyAccessGranted
-
-        _hasNotifications.value = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
-        } else {
-            true
-        }
-
-        _hasWriteSettings.value = Settings.System.canWrite(context)
-
-        _hasAccessibility.value = PermissionUtils.isAccessibilityServiceEnabled(context)
-
-        _hasUsageStats.value = isUsageStatsGranted()
-    }
-
-    private fun isUsageStatsGranted(): Boolean {
-        val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager ?: return false
-        val mode = appOps.checkOpNoThrow(
-            AppOpsManager.OPSTR_GET_USAGE_STATS,
-            android.os.Process.myUid(),
-            context.packageName
-        )
-        return mode == AppOpsManager.MODE_ALLOWED
+        val state = PermissionUtils.checkAllPermissions(context)
+        _hasAdmin.value = state.hasAdmin
+        _hasDnd.value = state.hasDnd
+        _hasNotifications.value = state.hasNotifications
+        _hasWriteSettings.value = state.hasWriteSettings
+        _hasAccessibility.value = state.hasAccessibility
+        _hasUsageStats.value = state.hasUsageStats
+        _hasNotificationAccess.value = PermissionUtils.isNotificationListenerEnabled(context)
     }
 }

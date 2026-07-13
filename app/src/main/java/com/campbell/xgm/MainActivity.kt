@@ -18,34 +18,18 @@ class MainActivity : ComponentActivity() {
     super.onCreate(savedInstanceState)
     
     val prefs = getSharedPreferences("game_mode_prefs", android.content.Context.MODE_PRIVATE)
-    val hasAdmin = (getSystemService(android.content.Context.DEVICE_POLICY_SERVICE) as android.app.admin.DevicePolicyManager)
-        .isAdminActive(android.content.ComponentName(this, com.campbell.xgm.domain.services.CampbellAdminReceiver::class.java))
-    val hasDnd = (getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager).isNotificationPolicyAccessGranted
-    val hasNotifications = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-        checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED
-    } else {
-        true
-    }
-    val hasWriteSettings = Settings.System.canWrite(this)
-    val hasAccessibility = PermissionUtils.isAccessibilityServiceEnabled(this)
-    val hasUsageStats = try {
-        val usm = getSystemService(android.content.Context.USAGE_STATS_SERVICE) as? android.app.usage.UsageStatsManager
-        val now = System.currentTimeMillis()
-        val stats = usm?.queryUsageStats(android.app.usage.UsageStatsManager.INTERVAL_DAILY, now - 60_000, now)
-        stats != null && stats.isNotEmpty()
-    } catch (_: Exception) { false }
-
+    val permState = PermissionUtils.checkAllPermissions(this)
     val showOnboarding = !prefs.getBoolean("onboarding_complete", false)
 
     val startDestination = when {
         showOnboarding -> "onboarding"
-        hasAdmin && hasDnd && hasNotifications && hasWriteSettings && hasAccessibility && hasUsageStats -> "dashboard"
+        permState.allGranted -> "dashboard"
         else -> "permissions"
     }
 
     // Auto-start game launch monitor if enabled
     val autoStartEnabled = prefs.getBoolean("auto_start_game_mode", false)
-    if (autoStartEnabled && hasUsageStats) {
+    if (autoStartEnabled && permState.hasUsageStats) {
         val monitorIntent = android.content.Intent(this, com.campbell.xgm.domain.services.GameLaunchMonitorService::class.java)
         startForegroundService(monitorIntent)
     }
@@ -66,7 +50,7 @@ class MainActivity : ComponentActivity() {
 
       campbellxgmTheme(darkTheme = darkModeValue) { 
           Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { 
-              com.campbell.xgm.ui.AppNavigation(startDestination = startDestination) 
+              com.campbell.xgm.ui.AppNavigation(startDestination = startDestination)
           } 
       }
     }

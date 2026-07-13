@@ -110,7 +110,7 @@ class StatsOverlayService : Service() {
 
         overlayView?.let { view ->
             view.removeAllViews()
-            view.addView(createTextView("📊 System Stats", 0xFF00E5FF.toInt(), 13f, true))
+            view.addView(createTextView("[SYS] System Stats", 0xFF00E5FF.toInt(), 13f, true))
             view.addView(createTextView(ramText, 0xFFFFFFFF.toInt(), 11f, false))
             view.addView(createTextView(cpuText, 0xFFFFFFFF.toInt(), 11f, false))
             view.addView(createTextView(batteryText, 0xFFFFFFFF.toInt(), 11f, false))
@@ -141,6 +141,9 @@ class StatsOverlayService : Service() {
         } catch (_: Exception) { "RAM: N/A" }
     }
 
+    private var prevCpuTotal: Long = -1L
+    private var prevCpuIdle: Long = -1L
+
     private fun getCpuUsage(): String {
         return try {
             val reader = RandomAccessFile("/proc/stat", "r")
@@ -153,9 +156,19 @@ class StatsOverlayService : Service() {
             val idle = parts[4].toLong()
             val iowait = parts[5].toLong()
             val total = user + nice + system + idle + iowait
-            val used = user + nice + system
-            // This is cumulative; first read is meaningless, but subsequent reads show relative load
-            "CPU: ${(used * 100 / total)}% used"
+            val idleAll = idle + iowait
+
+            val pct = if (prevCpuTotal < 0) {
+                0
+            } else {
+                val totalDiff = (total - prevCpuTotal).toDouble()
+                val idleDiff = (idleAll - prevCpuIdle).toDouble()
+                val usedDiff = totalDiff - idleDiff
+                (usedDiff * 100 / totalDiff).toInt().coerceIn(0, 100)
+            }
+            prevCpuTotal = total
+            prevCpuIdle = idleAll
+            "CPU: ${pct}% used"
         } catch (_: Exception) { "CPU: N/A" }
     }
 

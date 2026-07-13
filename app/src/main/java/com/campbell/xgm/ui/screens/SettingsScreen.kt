@@ -21,6 +21,8 @@ import com.campbell.xgm.ui.components.AlienButton
 import androidx.core.net.toUri
 import com.campbell.xgm.ui.components.HeaderBar
 import android.content.pm.PackageManager
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
 
 @Composable
 fun SettingsScreen(
@@ -30,6 +32,8 @@ fun SettingsScreen(
 ) {
     val isDeviceOwner by viewModel.isDeviceOwner.collectAsState()
     val isDeviceAdmin by viewModel.isDeviceAdmin.collectAsState()
+    val isRooted by viewModel.isRooted.collectAsState()
+    val hasFullPrivileges = isDeviceOwner || isRooted
     val isAggressiveFreezingEnabled by viewModel.isAggressiveFreezingEnabled.collectAsState()
     val isDndEnabled by viewModel.isDndEnabled.collectAsState()
     val isPingStabilizerEnabled by viewModel.isPingStabilizerEnabled.collectAsState()
@@ -152,21 +156,27 @@ fun SettingsScreen(
                 HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f), modifier = Modifier.padding(vertical = 16.dp))
 
                 val isGhostFingerActive = com.campbell.xgm.domain.services.SafetyInterceptor.isRunning()
+                val isGhostFingerEnabled by viewModel.isGhostFingerEnabled.collectAsState()
                 Text(
                     text = "Ghost Finger (Accessibility)",
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = if (isGhostFingerActive) "ACTIVE: Automated 'Force Stop' clicking is enabled." else "INACTIVE: Recommended for all users. Enables Greenify-style force-stop of background apps without needing ADB.",
-                    color = if (isGhostFingerActive) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    text = "Automated 'Force Stop' clicking of background apps. WARNING: when active it opens each app's Settings page and takes you out of the game. Off by default.",
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                     style = MaterialTheme.typography.bodySmall
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                AlienButton(
-                    text = if (isGhostFingerActive) "Disable in Settings" else "Enable in Settings",
-                    onClick = {
-                        context.startActivity(android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                SettingsSwitch(
+                    title = "Enable Ghost Finger",
+                    description = if (isGhostFingerActive) "Accessibility service is ON. Ghost Finger will run during game mode." else "Accessibility service is OFF. Enable it in system settings to use Ghost Finger.",
+                    checked = isGhostFingerEnabled,
+                    onCheckedChange = { enable ->
+                        viewModel.toggleGhostFinger(enable)
+                        if (enable && !isGhostFingerActive) {
+                            context.startActivity(android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                        }
                     }
                 )
             }
@@ -197,14 +207,16 @@ fun SettingsScreen(
 
                 SettingsSwitch(
                     title = "Cool-down Mode",
-                    description = "Reduces performance when device overheats to prevent throttling.",
+                    description = "Reduces performance when device overheats to prevent throttling." +
+                        if (!hasFullPrivileges) " (Limited: CPU throttle needs Device Owner/root)" else "",
                     checked = isCooldownEnabled,
                     onCheckedChange = { viewModel.toggleCooldown(it) }
                 )
 
                 SettingsSwitch(
                     title = "Storage Cleaner",
-                    description = "Clears game cache and temp files before launch to free storage.",
+                    description = "Clears game cache and temp files before launch to free storage." +
+                        if (!hasFullPrivileges) " (Limited: cannot clear other apps' cache without Device Owner/root)" else "",
                     checked = isStorageCleanerEnabled,
                     onCheckedChange = { viewModel.toggleStorageCleaner(it) }
                 )
@@ -214,7 +226,8 @@ fun SettingsScreen(
             SettingsCategoryCard(title = "Connectivity") {
                 SettingsSwitch(
                     title = "Network Boost",
-                    description = "Disables background sync and enables WiFi verbose logging to reduce network contention.",
+                    description = "Disables background sync and enables WiFi verbose logging to reduce network contention." +
+                        if (!hasFullPrivileges) " (Limited: full effect needs Device Owner/root + ADB)" else "",
                     checked = isNetworkBoostEnabled,
                     onCheckedChange = { viewModel.toggleNetworkBoost(it) }
                 )
@@ -575,19 +588,26 @@ fun ExclusionListDialog(
     val context = LocalContext.current
     var currentExcluded by remember { mutableStateOf(excludedPackages) }
     var searchQuery by remember { mutableStateOf("") }
+    var installedApps by remember { mutableStateOf<List<Triple<String, String, android.graphics.drawable.Drawable>>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    val scope = rememberCoroutineScope()
 
-    val installedApps = remember {
-        val pm = context.packageManager
-        pm.getInstalledApplications(PackageManager.GET_META_DATA)
-            .filter { pm.getLaunchIntentForPackage(it.packageName) != null }
-            .map { app ->
-                Triple(
-                    app.packageName,
-                    pm.getApplicationLabel(app).toString(),
-                    pm.getApplicationIcon(app)
-                )
-            }
-            .sortedBy { it.second }
+    LaunchedEffect(Unit) {
+        scope.launch(Dispatchers.IO) {
+            val pm = context.packageManager
+            val apps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
+                .filter { pm.getLaunchIntentForPackage(it.packageName) != null }
+                .map { app ->
+                    Triple(
+                        app.packageName,
+                        pm.getApplicationLabel(app).toString(),
+                        pm.getApplicationIcon(app)
+                    )
+                }
+                .sortedBy { it.second }
+            installedApps = apps
+            isLoading = false
+        }
     }
 
     val filteredApps = remember(searchQuery, installedApps) {
@@ -622,46 +642,52 @@ fun ExclusionListDialog(
                     )
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                LazyColumn(modifier = Modifier.weight(1f)) {
-                    items(filteredApps) { (pkg, name, icon) ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    currentExcluded = if (pkg in currentExcluded) {
-                                        currentExcluded - pkg
-                                    } else {
-                                        currentExcluded + pkg
+                if (isLoading) {
+                    Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.secondary)
+                    }
+                } else {
+                    LazyColumn(modifier = Modifier.weight(1f)) {
+                        items(filteredApps) { (pkg, name, icon) ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        currentExcluded = if (pkg in currentExcluded) {
+                                            currentExcluded - pkg
+                                        } else {
+                                            currentExcluded + pkg
+                                        }
                                     }
-                                }
-                                .padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Checkbox(
-                                checked = pkg in currentExcluded,
-                                onCheckedChange = { checked ->
-                                    currentExcluded = if (checked) {
-                                        currentExcluded + pkg
-                                    } else {
-                                        currentExcluded - pkg
-                                    }
-                                },
-                                colors = CheckboxDefaults.colors(
-                                    checkedColor = MaterialTheme.colorScheme.secondary
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = pkg in currentExcluded,
+                                    onCheckedChange = { checked ->
+                                        currentExcluded = if (checked) {
+                                            currentExcluded + pkg
+                                        } else {
+                                            currentExcluded - pkg
+                                        }
+                                    },
+                                    colors = CheckboxDefaults.colors(
+                                        checkedColor = MaterialTheme.colorScheme.secondary
+                                    )
                                 )
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = name,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Text(
-                                text = pkg,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                                style = MaterialTheme.typography.bodySmall
-                            )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = name,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Text(
+                                    text = pkg,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
                         }
                     }
                 }

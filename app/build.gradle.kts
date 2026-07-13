@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.compose.compiler)
@@ -13,16 +15,29 @@ android {
         applicationId = "com.campbell.xgm"
         minSdk = 29
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.3.0"
+        versionCode = 6
+        versionName = "1.4.1"
+    }
+
+    val keystorePropertiesFile = rootProject.file("keystore.properties")
+    val keystoreProperties = Properties()
+    if (keystorePropertiesFile.exists()) {
+        keystoreProperties.load(keystorePropertiesFile.inputStream())
     }
 
     signingConfigs {
         create("release") {
-            storeFile = file("release-key.jks")
-            storePassword = "campbellxgm123"
-            keyAlias = "campbellxgm"
-            keyPassword = "campbellxgm123"
+            // Prefer environment variables (no secrets in VCS); fall back to gitignored keystore.properties.
+            storeFile = file(
+                System.getenv("CAMPBELL_KEYSTORE_FILE")
+                    ?: keystoreProperties.getProperty("storeFile", "release-key.jks")
+            )
+            storePassword = System.getenv("CAMPBELL_KEYSTORE_PWD")
+                ?: keystoreProperties.getProperty("storePassword", "")
+            keyAlias = System.getenv("CAMPBELL_KEYSTORE_ALIAS")
+                ?: keystoreProperties.getProperty("keyAlias", "")
+            keyPassword = System.getenv("CAMPBELL_KEYSTORE_KEY_PWD")
+                ?: keystoreProperties.getProperty("keyPassword", "")
         }
     }
 

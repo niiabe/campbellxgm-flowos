@@ -21,6 +21,7 @@ import com.campbell.xgm.ui.components.AlienButton
 import com.campbell.xgm.ui.components.HeaderBar
 import com.campbell.xgm.data.local.GameTarget
 import com.campbell.xgm.data.local.GameProfile
+import com.campbell.xgm.util.PermissionUtils
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,27 +37,12 @@ fun DashboardScreen(
     var showProfileDialog by remember { mutableStateOf<Pair<String, String>?>(null) } // (packageName, gameName)
     val context = LocalContext.current
 
-    // Re-check permissions on resume and navigate to permissions screen if any are revoked
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-                val hasAdmin = (context.getSystemService(android.content.Context.DEVICE_POLICY_SERVICE) as android.app.admin.DevicePolicyManager)
-                    .isAdminActive(android.content.ComponentName(context, com.campbell.xgm.domain.services.CampbellAdminReceiver::class.java))
-                val hasDnd = (context.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager).isNotificationPolicyAccessGranted
-                val hasWriteSettings = android.provider.Settings.System.canWrite(context)
-                val hasAccessibility = com.campbell.xgm.util.PermissionUtils.isAccessibilityServiceEnabled(context)
-                val hasUsageStats = try {
-                    val appOps = context.getSystemService(android.content.Context.APP_OPS_SERVICE) as android.app.AppOpsManager
-                    val mode = appOps.checkOpNoThrow(
-                        android.app.AppOpsManager.OPSTR_GET_USAGE_STATS,
-                        android.os.Process.myUid(),
-                        context.packageName
-                    )
-                    mode == android.app.AppOpsManager.MODE_ALLOWED
-                } catch (_: Exception) { false }
-
-                if (!hasAdmin || !hasDnd || !hasWriteSettings || !hasAccessibility || !hasUsageStats) {
+                val permState = PermissionUtils.checkAllPermissions(context)
+                if (!permState.allGranted) {
                     onNavigateToPermissions()
                 }
             }

@@ -35,6 +35,7 @@ fun PermissionsScreen(
     val hasWriteSettings by viewModel.hasWriteSettings.collectAsState()
     val hasAccessibility by viewModel.hasAccessibility.collectAsState()
     val hasUsageStats by viewModel.hasUsageStats.collectAsState()
+    val hasNotificationAccess by viewModel.hasNotificationAccess.collectAsState()
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -167,6 +168,21 @@ fun PermissionsScreen(
                 onGrantClick = {
                     val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
                     context.startActivity(intent)
+                }
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Optional: keeps music/streaming alive during game mode by excluding media apps from freezing.
+            val notifAccessLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+                viewModel.checkPermissions()
+            }
+            PermissionItem(
+                title = "Notification Access (Keep Media)",
+                description = "Optional. Lets game mode detect and keep your music playing while freezing other apps.",
+                isGranted = hasNotificationAccess,
+                onGrantClick = {
+                    notifAccessLauncher.launch(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
                 }
             )
         }

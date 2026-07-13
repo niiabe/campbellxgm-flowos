@@ -4,7 +4,7 @@
   <p><strong>Extreme Gaming Mode App for Android</strong></p>
   <p>Locks pings, freezes background apps, and maximizes device performance.</p>
 
-  <h3><a href="https://github.com/niiabe/campbellxgm-flowos/raw/master/downloads/CampbellXGMFlowOS-v1.3.0.apk">📥 Download CampbellXGMFlowOS-v1.3.0.apk</a></h3>
+  <h3><a href="https://github.com/niiabe/campbellxgm-flowos/raw/master/downloads/CampbellXGMFlowOS-v1.4.1.apk">📥 Download CampbellXGMFlowOS-v1.4.1.apk</a></h3>
 </div>
 
 ---
@@ -18,6 +18,8 @@ When you launch a game through CampbellXGM, it aggressively shuts down system di
 ## Key Features
 
 *   **Aggressive App Freezing:** Kills ALL background apps using three methods — Device Owner suspension, Accessibility force-stop, or background process killing. Finds every running process (not just launcher apps) and periodically re-kills them every 5 seconds.
+*   **Media Keep-Alive:** Your music and streaming apps are automatically detected and excluded from freezing, so audio keeps playing during gameplay. Grant Notification Access (Settings → Permissions) to enable it.
+*   **Ghost Finger (opt-in):** The Accessibility force-stop method is now OFF by default. Enable it in Settings only if you need thorough force-stop without Device Owner — note it opens each app's Settings page during freezing.
 *   **Auto-Teardown:** Detects when you leave a game via Usage Access monitoring and automatically restores all system settings — no manual "Stop Game Mode" tap needed.
 *   **Auto-Start Game Mode:** Add your games to the dashboard, enable auto-start, and game mode activates automatically when you launch any saved game.
 *   **FPS Overlay:** Shows real-time frame rate on screen during gameplay.

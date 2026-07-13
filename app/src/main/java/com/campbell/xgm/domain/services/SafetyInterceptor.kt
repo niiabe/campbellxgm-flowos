@@ -14,8 +14,6 @@ import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.core.net.toUri
-import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 class SafetyInterceptor : AccessibilityService() {
@@ -31,13 +29,14 @@ class SafetyInterceptor : AccessibilityService() {
 
         fun isRunning(): Boolean = instance != null
 
-        // Resource IDs for Force Stop button across common Android versions/OEMs
-        private val FORCE_STOP_IDS = intArrayOf(
-            // Stock Android / AOSP
-            android.R.id.button2, // Often used for negative/cancel buttons
+        private val FORCE_STOP_VIEW_IDS = listOf(
+            "com.android.settings:id/force_stop_button",
+            "com.android.settings:id/force_stop",
+            "com.android.settings:id/force_stop_btn",
+            "com.android.settings:id/force_stop_button_layout",
+            "com.android.settings:id/force_stop_button_container"
         )
 
-        // Text patterns to search for Force Stop button (handles OEM/locale variations)
         private val FORCE_STOP_TEXTS = listOf(
             "Force stop", "FORCE STOP", "Force Stop",
             "Forced stop", "Stop app", "Force-stop",
@@ -46,7 +45,6 @@ class SafetyInterceptor : AccessibilityService() {
             "Forzado stop", "Forzare arresto"
         )
 
-        // Text patterns for the confirmation dialog button
         private val CONFIRM_TEXTS = listOf(
             "OK", "FORCE STOP", "Ok", "Force stop",
             "Confirm", "确定", "확인", "Aceptar",
@@ -54,9 +52,10 @@ class SafetyInterceptor : AccessibilityService() {
         )
     }
 
+    private val lock = Any()
     private val handler = Handler(Looper.getMainLooper())
-    private val pendingPackages = CopyOnWriteArrayList<String>()
-    private val isProcessing = AtomicBoolean(false)
+    private val pendingPackages = mutableListOf<String>()
+    private var processingState = 0
     private val onCompleteCallback = AtomicReference<(() -> Unit)?>(null)
 
     private val forceStopReceiver = object : BroadcastReceiver() {
@@ -74,11 +73,11 @@ class SafetyInterceptor : AccessibilityService() {
         super.onServiceConnected()
         instance = this
         val filter = IntentFilter(ACTION_FORCE_STOP)
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(forceStopReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(forceStopReceiver, filter)
-        }
+        // ContextCompat.registerReceiver applies the NOT_EXPORTED flag on Android 13+ and is a
+        // no-op on older versions, avoiding the missing-flag SecurityException crash.
+        androidx.core.content.ContextCompat.registerReceiver(
+            this, forceStopReceiver, filter, androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
+        )
         Log.i(TAG, "SafetyInterceptor connected")
     }
 
@@ -87,10 +86,11 @@ class SafetyInterceptor : AccessibilityService() {
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
 
         val packageName = event.packageName?.toString() ?: return
-        Log.d(TAG, "Window changed to: $packageName")
 
-        if (isProcessing.get() && pendingPackages.isNotEmpty()) {
-            handleCurrentWindow(packageName)
+        synchronized(lock) {
+            if (processingState == 1 && pendingPackages.isNotEmpty()) {
+                handleCurrentWindow(packageName)
+            }
         }
     }
 
@@ -104,21 +104,28 @@ class SafetyInterceptor : AccessibilityService() {
             invokeCallback()
             return
         }
-        pendingPackages.clear()
-        pendingPackages.addAll(packages)
-        isProcessing.set(true)
-        processNextPackage()
+        synchronized(lock) {
+            pendingPackages.clear()
+            pendingPackages.addAll(packages)
+            if (processingState == 0) {
+                processingState = 1
+                processNextPackage()
+            }
+        }
     }
 
     private fun processNextPackage() {
-        if (pendingPackages.isEmpty()) {
-            isProcessing.set(false)
-            Log.i(TAG, "All packages processed for force-stop")
-            invokeCallback()
-            return
+        val targetPkg: String
+        synchronized(lock) {
+            if (pendingPackages.isEmpty()) {
+                processingState = 0
+                Log.i(TAG, "All packages processed for force-stop")
+                invokeCallback()
+                return
+            }
+            targetPkg = pendingPackages.removeAt(0)
         }
 
-        val targetPkg = pendingPackages.removeAt(0)
         Log.i(TAG, "Force-stopping: $targetPkg")
 
         try {
@@ -138,12 +145,13 @@ class SafetyInterceptor : AccessibilityService() {
             val rootNode = rootInActiveWindow
             if (rootNode == null) {
                 Log.w(TAG, "rootInActiveWindow is null, skipping...")
-                if (pendingPackages.isNotEmpty()) pendingPackages.removeAt(0)
+                synchronized(lock) {
+                    if (pendingPackages.isNotEmpty()) pendingPackages.removeAt(0)
+                }
                 handler.postDelayed({ processNextPackage() }, 300)
                 return@postDelayed
             }
 
-            // Try to find Force Stop button using resource IDs first, then text search
             var forceStopNode = findNodeByResourceId(rootNode)
             if (forceStopNode == null) {
                 for (text in FORCE_STOP_TEXTS) {
@@ -155,19 +163,22 @@ class SafetyInterceptor : AccessibilityService() {
             if (forceStopNode != null) {
                 if (!forceStopNode.isEnabled) {
                     Log.i(TAG, "Force Stop already disabled for $packageName (app already stopped), skipping...")
-                    if (pendingPackages.isNotEmpty()) pendingPackages.removeAt(0)
+                    synchronized(lock) {
+                        if (pendingPackages.isNotEmpty()) pendingPackages.removeAt(0)
+                    }
                     handler.postDelayed({ processNextPackage() }, 200)
                     return@postDelayed
                 }
                 Log.i(TAG, "Found Force Stop button, clicking...")
                 performClick(forceStopNode)
 
-                // Handle confirmation dialog after a delay
                 handler.postDelayed({
                     val confirmRoot = rootInActiveWindow
                     if (confirmRoot == null) {
                         Log.w(TAG, "rootInActiveWindow is null during confirmation, skipping...")
-                        if (pendingPackages.isNotEmpty()) pendingPackages.removeAt(0)
+                        synchronized(lock) {
+                            if (pendingPackages.isNotEmpty()) pendingPackages.removeAt(0)
+                        }
                         handler.postDelayed({ processNextPackage() }, 300)
                         return@postDelayed
                     }
@@ -185,12 +196,16 @@ class SafetyInterceptor : AccessibilityService() {
                         Log.w(TAG, "Confirm button not found, skipping...")
                     }
 
-                    if (pendingPackages.isNotEmpty()) pendingPackages.removeAt(0)
+                    synchronized(lock) {
+                        if (pendingPackages.isNotEmpty()) pendingPackages.removeAt(0)
+                    }
                     handler.postDelayed({ processNextPackage() }, 500)
                 }, 500)
             } else {
                 Log.w(TAG, "Force Stop button not found for $packageName, skipping...")
-                if (pendingPackages.isNotEmpty()) pendingPackages.removeAt(0)
+                synchronized(lock) {
+                    if (pendingPackages.isNotEmpty()) pendingPackages.removeAt(0)
+                }
                 handler.postDelayed({ processNextPackage() }, 300)
             }
         }, 800)
@@ -201,9 +216,13 @@ class SafetyInterceptor : AccessibilityService() {
     }
 
     private fun findNodeByResourceId(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        // Some Android versions expose the Force Stop button via known resource IDs
-        val nodes = root.findAccessibilityNodeInfosByViewId("com.android.settings:id/force_stop_button")
-        return nodes?.firstOrNull()
+        for (viewId in FORCE_STOP_VIEW_IDS) {
+            val nodes = root.findAccessibilityNodeInfosByViewId(viewId)
+            if (nodes?.isNotEmpty() == true) {
+                return nodes.first()
+            }
+        }
+        return null
     }
 
     private fun findNodeByText(root: AccessibilityNodeInfo, text: String): AccessibilityNodeInfo? {

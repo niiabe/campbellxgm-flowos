@@ -32,17 +32,18 @@ class GameModeWidgetProvider : AppWidgetProvider() {
 
             val gamePrefs = context.getSharedPreferences("saved_games_prefs", Context.MODE_PRIVATE)
             val activeGame = PipelineService.activeTargetPackage
-
             val isRunning = PipelineService.isRunning
 
-            // Update status text
+            val gameCount = gamePrefs.all.size
+            val firstGameName = if (gameCount > 0) {
+                gamePrefs.all.entries.first().value as? String ?: "First game"
+            } else null
+
             views.setTextViewText(
                 R.id.widget_status,
                 if (isRunning && activeGame != null) "Game Mode: ACTIVE" else "Game Mode: OFF"
             )
 
-            // Update game count
-            val gameCount = gamePrefs.all.size
             views.setTextViewText(
                 R.id.widget_games,
                 when {
@@ -52,7 +53,6 @@ class GameModeWidgetProvider : AppWidgetProvider() {
                 }
             )
 
-            // Toggle button click
             val toggleIntent = Intent(context, GameModeWidgetReceiver::class.java).apply {
                 action = "TOGGLE_GAME_MODE"
             }
@@ -62,10 +62,9 @@ class GameModeWidgetProvider : AppWidgetProvider() {
             )
             views.setOnClickPendingIntent(R.id.widget_toggle, togglePendingIntent)
 
-            // Update toggle text
             views.setTextViewText(
                 R.id.widget_toggle,
-                if (isRunning) "STOP GAME MODE" else "START GAME MODE"
+                if (isRunning) "STOP GAME MODE" else (firstGameName?.let { "START $it" } ?: "ADD A GAME")
             )
 
             appWidgetManager.updateAppWidget(appWidgetId, views)
