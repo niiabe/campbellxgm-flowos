@@ -2,6 +2,19 @@
 
 All notable changes to CampbellXGM FlowOS will be documented in this file.
 
+## [1.5.0] - 2026-07-15
+
+### Added
+- **In-app auto-update** — On launch the app checks GitHub Releases for a newer version and prompts to update automatically.
+- **Update screen** — Shows the new version, release notes, and a live download progress bar with one-tap install.
+- **Manual update check** — `Settings → App Updates → Check for Updates` lets you check and install updates any time.
+- **Skip memory** — A skipped update is remembered and won't re-prompt until a newer version is published.
+- **GitHub Releases distribution** — Signed release APKs are published to GitHub Releases (replacing the old `downloads/` folder); the updater downloads the APK directly from the release asset.
+- **CI release pipeline** — `.github/workflows/release.yml` builds a signed APK and publishes it to GitHub Releases on a `v*` tag push or manual dispatch.
+
+### Changed
+- README download link now points to GitHub Releases instead of the local `downloads/` folder.
+
 ## [1.4.1] - 2026-07-13
 
 ### Security

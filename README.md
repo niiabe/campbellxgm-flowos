@@ -4,7 +4,8 @@
   <p><strong>Extreme Gaming Mode App for Android</strong></p>
   <p>Locks pings, freezes background apps, and maximizes device performance.</p>
 
-  <h3><a href="https://github.com/niiabe/campbellxgm-flowos/raw/master/downloads/CampbellXGMFlowOS-v1.4.1.apk">📥 Download CampbellXGMFlowOS-v1.4.1.apk</a></h3>
+  <h3><a href="https://github.com/niiabe/campbellxgm-flowos/releases/latest">📥 Download latest release (APK)</a></h3>
+  <p>Or just install the app — it updates itself from GitHub Releases automatically.</p>
 </div>
 
 ---
@@ -59,20 +60,44 @@ The app features a fully categorized control center with 13 toggles:
 
 > **Warning:** CampbellXGM uses powerful system APIs. You must grant specialized permissions for full functionality.
 
-1. Build the APK: `./gradlew assembleDebug`
-2. Install the APK to your device
-3. Open the app — you'll be guided through the permission flow:
-   - **Device Admin** — for aggressive app freezing
-   - **Do Not Disturb** — to silence notifications during gameplay
-   - **Notifications** — for the "Stop Game Mode" persistent notification
-   - **Modify System Settings** — for Keep Screen Awake and Auto-Brightness Lock
-   - **Accessibility Service** — for force-stopping background apps
-   - **Usage Access** — for auto-teardown and auto-start game mode
-4. *(Optional)* For maximum power, grant Device Owner via ADB:
-   ```bash
-   adb shell dpm set-device-owner com.campbell.xgm/.domain.services.CampbellAdminReceiver
-   ```
-5. Add games to the Dashboard, tap **Launch**, and game mode activates!
+### Install
+1. Download the latest APK from the [Releases page](https://github.com/niiabe/campbellxgm-flowos/releases/latest) and install it (you may need to allow "Install unknown apps" for your file manager / browser).
+2. Open the app — you'll be guided through the permission flow:
+    - **Device Admin** — for aggressive app freezing
+    - **Do Not Disturb** — to silence notifications during gameplay
+    - **Notifications** — for the "Stop Game Mode" persistent notification
+    - **Modify System Settings** — for Keep Screen Awake and Auto-Brightness Lock
+    - **Accessibility Service** — for force-stopping background apps
+    - **Usage Access** — for auto-teardown and auto-start game mode
+3. *(Optional)* For maximum power, grant Device Owner via ADB:
+    ```bash
+    adb shell dpm set-device-owner com.campbell.xgm/.domain.services.CampbellAdminReceiver
+    ```
+4. Add games to the Dashboard, tap **Launch**, and game mode activates!
+
+### In-App Auto-Update
+CampbellXGM checks [GitHub Releases](https://github.com/niiabe/campbellxgm-flowos/releases) for a newer version every time it launches:
+- **If an update is available**, a prompt appears with the release notes and a **Download & Install** button. Tap it to download the signed APK directly from the release and install it.
+- **Skip** remembers that version so it won't prompt again until an even newer release ships.
+- **Manual check:** `Settings → App Updates → Check for Updates` opens the same update screen any time.
+
+## Building from source
+```bash
+./gradlew assembleDebug      # debug APK (app/build/outputs/apk/debug)
+./gradlew assembleRelease    # signed release APK (needs signing config, see below)
+```
+
+### Release signing (CI)
+`.github/workflows/release.yml` builds a **signed** release APK and publishes it to GitHub Releases. To enable it, add these repository secrets (`Settings → Secrets and variables → Actions`):
+
+| Secret | Value |
+| --- | --- |
+| `CAMPBELL_KEYSTORE_B64` | `base64 -w0 app/release-key.jks` |
+| `CAMPBELL_KEYSTORE_PWD` | keystore password |
+| `CAMPBELL_KEYSTORE_ALIAS` | key alias (e.g. `campbellxgm`) |
+| `CAMPBELL_KEYSTORE_KEY_PWD` | key password |
+
+Then bump `versionName` / `versionCode` in `app/build.gradle.kts`, commit, and push a tag `vX.Y.Z` (e.g. `git tag v1.5.0 && git push origin v1.5.0`). The workflow creates the release automatically. The signing config also reads a local, gitignored `keystore.properties` for local release builds.
 
 ## Changelog
 

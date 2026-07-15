@@ -78,6 +78,18 @@ fun AboutScreen(onNavigateBack: () -> Unit) {
         )
         Spacer(modifier = Modifier.height(12.dp))
 
+        // v1.5.0
+        ChangelogEntry(
+            version = "v1.5.0",
+            changes = listOf(
+                "Auto-Update System: app checks GitHub Releases for newer versions on launch",
+                "Update screen with release notes, download progress, and one-tap install",
+                "Settings → App Updates lets you check and install updates manually",
+                "Skipped updates are remembered and won't re-prompt until a newer version ships",
+                "Signed release builds are published to GitHub Releases via CI"
+            )
+        )
+
         // v1.4.0
         ChangelogEntry(
             version = "v1.4.0",

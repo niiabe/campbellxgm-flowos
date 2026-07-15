@@ -28,6 +28,7 @@ import kotlinx.coroutines.Dispatchers
 fun SettingsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToAdbSetup: () -> Unit,
+    onNavigateToUpdate: () -> Unit,
     viewModel: SettingsViewModel = viewModel()
 ) {
     val isDeviceOwner by viewModel.isDeviceOwner.collectAsState()
@@ -432,6 +433,31 @@ fun SettingsScreen(
                         }
                     }
                 )
+            }
+
+            // Updates Category
+            SettingsCategoryCard(title = "App Updates") {
+                val context = androidx.compose.ui.platform.LocalContext.current
+                val currentVersion = remember {
+                    try {
+                        context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "Unknown"
+                    } catch (_: android.content.pm.PackageManager.NameNotFoundException) {
+                        "Unknown"
+                    }
+                }
+                Text(
+                    text = "Installed version: $currentVersion",
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Download and install updates directly from GitHub Releases. The app checks automatically on launch.",
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                AlienButton(text = "Check for Updates", onClick = onNavigateToUpdate)
             }
 
             // Exclusion List Category

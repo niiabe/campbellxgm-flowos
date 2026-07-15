@@ -2,8 +2,9 @@ package com.campbell.xgm.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -13,6 +14,9 @@ import com.campbell.xgm.ui.screens.AboutScreen
 import com.campbell.xgm.ui.screens.AdbSetupScreen
 import com.campbell.xgm.ui.screens.PermissionsScreen
 import com.campbell.xgm.ui.screens.OnboardingScreen
+import com.campbell.xgm.ui.screens.UpdateScreen
+import com.campbell.xgm.ui.screens.UpdateUiState
+import com.campbell.xgm.ui.screens.UpdateViewModel
 
 sealed class Screen(val route: String) {
     object Dashboard : Screen("dashboard")
@@ -21,11 +25,27 @@ sealed class Screen(val route: String) {
     object AdbSetup : Screen("adb_setup")
     object Permissions : Screen("permissions")
     object Onboarding : Screen("onboarding")
+    object Update : Screen("update")
 }
 
 @Composable
 fun AppNavigation(startDestination: String = Screen.Dashboard.route) {
     val navController = rememberNavController()
+    val updateViewModel: UpdateViewModel = viewModel()
+    var navigatedToUpdate by remember { mutableStateOf(false) }
+
+    // Check for an available update in the background and surface it automatically.
+    LaunchedEffect(Unit) {
+        updateViewModel.checkForUpdate(autoPrompt = true)
+    }
+
+    LaunchedEffect(updateViewModel.state.value) {
+        val state = updateViewModel.state.value
+        if (state is UpdateUiState.Available && !navigatedToUpdate) {
+            navigatedToUpdate = true
+            navController.navigate("update/true")
+        }
+    }
 
     NavHost(
         navController = navController,
@@ -64,7 +84,8 @@ fun AppNavigation(startDestination: String = Screen.Dashboard.route) {
         composable(Screen.Settings.route) {
             SettingsScreen(
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToAdbSetup = { navController.navigate(Screen.AdbSetup.route) }
+                onNavigateToAdbSetup = { navController.navigate(Screen.AdbSetup.route) },
+                onNavigateToUpdate = { navController.navigate("update/false") }
             )
         }
         composable(Screen.About.route) {
@@ -72,6 +93,28 @@ fun AppNavigation(startDestination: String = Screen.Dashboard.route) {
         }
         composable(Screen.AdbSetup.route) {
             AdbSetupScreen(onNavigateBack = { navController.popBackStack() })
+        }
+        composable(
+            route = "update/{autoPrompt}",
+            arguments = listOf(
+                androidx.navigation.navArgument("autoPrompt") {
+                    defaultValue = false
+                    type = androidx.navigation.NavType.BoolType
+                }
+            )
+        ) { backStackEntry ->
+            val autoPrompt = backStackEntry.arguments?.getBoolean("autoPrompt") ?: false
+            UpdateScreen(
+                autoPrompt = autoPrompt,
+                viewModel = updateViewModel,
+                onDismiss = {
+                    val state = updateViewModel.state.value
+                    if (state is UpdateUiState.Available) {
+                        updateViewModel.skip(state.release.tag)
+                    }
+                    navController.popBackStack()
+                }
+            )
         }
     }
 }
