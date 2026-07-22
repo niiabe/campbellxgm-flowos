@@ -50,6 +50,7 @@ fun SettingsScreen(
     val isStorageCleanerEnabled by viewModel.isStorageCleanerEnabled.collectAsState()
     val isDarkModeEnabled by viewModel.isDarkModeEnabled.collectAsState()
     val isStatsOverlayEnabled by viewModel.isStatsOverlayEnabled.collectAsState()
+    val isSpeedBoostEnabled by viewModel.isSpeedBoostEnabled.collectAsState()
     val excludedApps by viewModel.excludedApps.collectAsState()
     val selectedDns by viewModel.selectedDns.collectAsState()
     val dnsError by viewModel.dnsError.collectAsState()
@@ -156,8 +157,9 @@ fun SettingsScreen(
 
                 HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f), modifier = Modifier.padding(vertical = 16.dp))
 
-                val isGhostFingerActive = com.campbell.xgm.domain.services.SafetyInterceptor.isRunning()
+                val isGhostFingerActive = com.campbell.xgm.domain.services.SafetyInterceptor.instance != null
                 val isGhostFingerEnabled by viewModel.isGhostFingerEnabled.collectAsState()
+                val isGhostFingerOverlayEnabled by viewModel.isGhostFingerOverlayEnabled.collectAsState()
                 Text(
                     text = "Ghost Finger (Accessibility)",
                     style = MaterialTheme.typography.titleSmall,
@@ -180,6 +182,15 @@ fun SettingsScreen(
                         }
                     }
                 )
+                
+                if (isGhostFingerEnabled) {
+                    SettingsSwitch(
+                        title = "Show Speedometer Overlay",
+                        description = "Displays the animated overlay during force-stopping.",
+                        checked = isGhostFingerOverlayEnabled,
+                        onCheckedChange = { viewModel.toggleGhostFingerOverlay(it) }
+                    )
+                }
             }
 
             // Performance Features Category
@@ -221,6 +232,30 @@ fun SettingsScreen(
                     checked = isStorageCleanerEnabled,
                     onCheckedChange = { viewModel.toggleStorageCleaner(it) }
                 )
+            }
+
+            // Speed Boost Category
+            SettingsCategoryCard(title = "Speed Boost") {
+                SettingsSwitch(
+                    title = "Speed Boost",
+                    description = "Adds a Boost button to the dashboard that force-kills all background apps instantly.",
+                    checked = isSpeedBoostEnabled,
+                    onCheckedChange = { viewModel.toggleSpeedBoost(it) }
+                )
+
+                if (isSpeedBoostEnabled) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    var showCustomListsDialog by remember { mutableStateOf(false) }
+                    AlienButton(
+                        text = "Manage Custom Lists",
+                        onClick = { showCustomListsDialog = true }
+                    )
+                    if (showCustomListsDialog) {
+                        CustomListsDialog(
+                            onDismiss = { showCustomListsDialog = false }
+                        )
+                    }
+                }
             }
 
             // Connectivity Category

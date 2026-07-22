@@ -18,19 +18,25 @@ fun AlienButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    isDanger: Boolean = false
+    isDanger: Boolean = false,
+    isEnabled: Boolean = true
 ) {
     val borderColor = if (isDanger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-    val contentColor = if (isDanger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+    val contentColor = if (!isEnabled) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+    else if (isDanger) MaterialTheme.colorScheme.error
+    else MaterialTheme.colorScheme.primary
 
     Button(
         onClick = onClick,
         modifier = modifier,
+        enabled = isEnabled,
         shape = RoundedCornerShape(8.dp),
-        border = BorderStroke(1.5.dp, borderColor),
+        border = BorderStroke(1.5.dp, if (isEnabled) borderColor else borderColor.copy(alpha = 0.3f)),
         colors = ButtonDefaults.buttonColors(
             containerColor = Color.Transparent,
-            contentColor = contentColor
+            contentColor = contentColor,
+            disabledContainerColor = Color.Transparent,
+            disabledContentColor = contentColor
         ),
         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
     ) {

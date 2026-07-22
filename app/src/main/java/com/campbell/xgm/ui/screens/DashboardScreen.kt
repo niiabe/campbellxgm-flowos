@@ -33,9 +33,13 @@ fun DashboardScreen(
 ) {
     val allowedGames by viewModel.allowedGames.collectAsState(initial = emptyList())
     val installedApps by viewModel.installedApps.collectAsState()
+    val runningCount by viewModel.runningAppsCount.collectAsState()
+    val isBoosting by viewModel.isBoosting.collectAsState()
+    val boostResult by viewModel.boostResult.collectAsState()
     var showAppDialog by remember { mutableStateOf(false) }
-    var showProfileDialog by remember { mutableStateOf<Pair<String, String>?>(null) } // (packageName, gameName)
+    var showProfileDialog by remember { mutableStateOf<Pair<String, String>?>(null) }
     val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
 
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -45,11 +49,19 @@ fun DashboardScreen(
                 if (!permState.allGranted) {
                     onNavigateToPermissions()
                 }
+                viewModel.refreshRunningCount()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    LaunchedEffect(boostResult) {
+        boostResult?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearBoostResult()
         }
     }
 
@@ -77,6 +89,7 @@ fun DashboardScreen(
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = {
@@ -97,9 +110,9 @@ fun DashboardScreen(
                 .padding(paddingValues)
         ) {
             HeaderBar()
-            
+
             Spacer(modifier = Modifier.height(24.dp))
-            
+
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -110,11 +123,10 @@ fun DashboardScreen(
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.secondary
                 )
-                
+
                 Spacer(modifier = Modifier.height(16.dp))
-                
+
                 if (allowedGames.isEmpty()) {
-                    // Empty State
                     Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                         Text(
                             text = "No games added yet.\nClick the + button to add a game.",
@@ -133,17 +145,32 @@ fun DashboardScreen(
                         }
                     }
                 }
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = if (isBoosting) "Boosting..." else "$runningCount apps running",
+                    color = if (isBoosting) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
                     AlienButton(text = "Settings", onClick = onNavigateToSettings)
+                    AlienButton(
+                        text = if (isBoosting) "Boosting..." else "Boost",
+                        onClick = { viewModel.startBoost() },
+                        isEnabled = !isBoosting
+                    )
                     AlienButton(text = "About", onClick = onNavigateToAbout)
                 }
-                
+
                 Spacer(modifier = Modifier.height(24.dp))
             }
         }

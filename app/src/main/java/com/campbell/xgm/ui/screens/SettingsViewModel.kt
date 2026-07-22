@@ -4,6 +4,7 @@ import android.app.Application
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
+import android.Manifest
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
@@ -72,6 +73,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     // app's Settings > Force Stop page and hijacks the screen during gameplay.
     private val _isGhostFingerEnabled = MutableStateFlow(sharedPreferences.getBoolean("accessibility_force_stop", false))
     val isGhostFingerEnabled: StateFlow<Boolean> = _isGhostFingerEnabled
+    
+    private val _isGhostFingerOverlayEnabled = MutableStateFlow(sharedPreferences.getBoolean("ghost_finger_overlay", true))
+    val isGhostFingerOverlayEnabled: StateFlow<Boolean> = _isGhostFingerOverlayEnabled
 
     private val _isCooldownEnabled = MutableStateFlow(sharedPreferences.getBoolean("cooldown_mode", true))
     val isCooldownEnabled: StateFlow<Boolean> = _isCooldownEnabled
@@ -84,6 +88,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     private val _isStatsOverlayEnabled = MutableStateFlow(sharedPreferences.getBoolean("stats_overlay", false))
     val isStatsOverlayEnabled: StateFlow<Boolean> = _isStatsOverlayEnabled
+
+    private val _isSpeedBoostEnabled = MutableStateFlow(sharedPreferences.getBoolean("speed_boost_enabled", true))
+    val isSpeedBoostEnabled: StateFlow<Boolean> = _isSpeedBoostEnabled
 
     // Exclusion List
     private val _excludedApps = MutableStateFlow(loadExcludedApps())
@@ -190,6 +197,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         _isGhostFingerEnabled.value = enabled
     }
 
+    fun toggleGhostFingerOverlay(enabled: Boolean) {
+        sharedPreferences.edit { putBoolean("ghost_finger_overlay", enabled) }
+        _isGhostFingerOverlayEnabled.value = enabled
+    }
+
     fun toggleCooldown(enabled: Boolean) {
         sharedPreferences.edit { putBoolean("cooldown_mode", enabled) }
         _isCooldownEnabled.value = enabled
@@ -208,6 +220,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun toggleStatsOverlay(enabled: Boolean) {
         sharedPreferences.edit { putBoolean("stats_overlay", enabled) }
         _isStatsOverlayEnabled.value = enabled
+    }
+
+    fun toggleSpeedBoost(enabled: Boolean) {
+        sharedPreferences.edit { putBoolean("speed_boost_enabled", enabled) }
+        _isSpeedBoostEnabled.value = enabled
     }
 
     suspend fun getCacheSize(packageName: String): String = withContext(Dispatchers.IO) {
@@ -296,17 +313,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                         dpm.setGlobalSetting(adminComponent, "private_dns_specifier", sanitizedHostname)
                     }
                     _dnsError.value = null
-                } else {
-                    val hasWriteSecure = try {
-                        Settings.System.putString(app.contentResolver, "secure_settings_check", null)
-                        true
-                    } catch (_: SecurityException) {
-                        false
-                    }
-                    if (!hasWriteSecure) {
-                        _dnsError.value = "DNS change requires Device Owner or WRITE_SECURE_SETTINGS (ADB)"
-                        return
-                    }
+                } else if (hasWriteSecureSettings(app)) {
                     val contentResolver = app.contentResolver
                     if (provider == DnsProvider.SYSTEM_DEFAULT) {
                         Settings.Global.putString(contentResolver, "private_dns_mode", "off")
@@ -316,12 +323,24 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                         Settings.Global.putString(contentResolver, "private_dns_specifier", sanitizedHostname)
                     }
                     _dnsError.value = null
+                } else {
+                    _dnsError.value = "DNS change requires Device Owner or WRITE_SECURE_SETTINGS (ADB)"
                 }
             } catch (e: SecurityException) {
                 _dnsError.value = "DNS change requires Device Owner or WRITE_SECURE_SETTINGS (ADB)"
                 Log.e("SettingsViewModel", "Failed to apply DNS settings: ${e.message}")
+            } catch (e: Exception) {
+                _dnsError.value = "Could not apply DNS setting: ${e.message}"
+                Log.e("SettingsViewModel", "Failed to apply DNS settings: ${e.message}")
             }
         }
+    }
+
+    private fun hasWriteSecureSettings(context: Context): Boolean {
+        return androidx.core.content.ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.WRITE_SECURE_SETTINGS
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
     }
 
     @Suppress("DEPRECATION")

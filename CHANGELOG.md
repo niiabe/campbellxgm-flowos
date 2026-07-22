@@ -2,6 +2,12 @@
 
 All notable changes to CampbellXGM FlowOS will be documented in this file.
 
+## [1.6.0] - 2026-07-22
+
+### Added
+- **Ghost Finger Speedometer** — Animated visual overlay during the force-stop sequence to provide real-time feedback on apps frozen. Can be toggled in Settings.
+- **Robust Force-Stopping** — Replaced the event-driven accessibility force-stop with a sequential polling mechanism, significantly improving reliability and preventing race conditions.
+
 ## [1.5.0] - 2026-07-15
 
 ### Added

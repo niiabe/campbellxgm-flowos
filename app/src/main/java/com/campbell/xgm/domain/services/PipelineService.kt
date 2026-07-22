@@ -365,9 +365,17 @@ class PipelineService : Service() {
                 // Gated behind an explicit opt-in pref (default OFF): this opens each app's
                 // Settings page and hijacks the screen, so it must never run unless enabled.
                 val ghostFingerEnabled = prefs.getBoolean("accessibility_force_stop", false)
-                if (ghostFingerEnabled && SafetyInterceptor.isRunning()) {
+                if (ghostFingerEnabled) {
                     Log.i("PipelineService", "Triggering Accessibility Ghost Finger for thorough force-stop")
-                    SafetyInterceptor.instance?.forceStopApps(appsToFreeze.toList())
+                    val speedBoostManager = SpeedBoostManager(this@PipelineService)
+                    val appsToKill = speedBoostManager.getAppsToKill().filter { appsToFreeze.contains(it) }
+                    
+                    val intent = Intent(SafetyInterceptor.ACTION_FORCE_STOP).apply {
+                        setPackage(packageName)
+                        putStringArrayListExtra(SafetyInterceptor.EXTRA_PACKAGES, ArrayList(appsToKill))
+                    }
+                    sendBroadcast(intent)
+                    speedBoostManager.markAsClosed(appsToKill)
                 }
 
                 startPeriodicFreezing(appsToFreeze)
