@@ -2,6 +2,17 @@
 
 All notable changes to CampbellXGM FlowOS will be documented in this file.
 
+## [1.7.0] - 2026-07-24
+
+### Added
+- **Split APKs** — The release is now divided into architecture-specific APKs (arm64-v8a, armeabi-v7a, x86, x86_64) to significantly reduce the download size for individual devices. A universal APK is still available.
+
+### Fixed
+- **Memory Leaks** — Fixed `StaticFieldLeak` issues in `PermissionsViewModel` and `SafetyInterceptor` to ensure proper garbage collection of contexts.
+- **Recomposition Performance** — Fixed an issue in `Navigation.kt` where a Jetpack Compose screen was observing `UpdateUiState` incorrectly.
+- **UI Drawing Efficiency** — Fixed `GhostFingerSpeedometerView.kt` where multiple object allocations were happening inside the `onDraw` method, which is now optimized.
+- **Resource IDs** — Fixed `GhostFingerOverlay.kt` improperly using hardcoded integer IDs.
+
 ## [1.6.0] - 2026-07-22
 
 ### Added

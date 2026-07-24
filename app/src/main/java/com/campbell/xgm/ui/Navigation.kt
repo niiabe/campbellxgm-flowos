@@ -39,9 +39,9 @@ fun AppNavigation(startDestination: String = Screen.Dashboard.route) {
         updateViewModel.checkForUpdate(autoPrompt = true)
     }
 
-    LaunchedEffect(updateViewModel.state.value) {
-        val state = updateViewModel.state.value
-        if (state is UpdateUiState.Available && !navigatedToUpdate) {
+    val updateState by updateViewModel.state.collectAsState()
+    LaunchedEffect(updateState) {
+        if (updateState is UpdateUiState.Available && !navigatedToUpdate) {
             navigatedToUpdate = true
             navController.navigate("update/true")
         }

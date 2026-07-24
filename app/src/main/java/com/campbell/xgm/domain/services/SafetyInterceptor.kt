@@ -17,6 +17,8 @@ import android.view.accessibility.AccessibilityNodeInfo
 
 class SafetyInterceptor : AccessibilityService() {
 
+    private var overlayManager: GhostFingerOverlay? = null
+
     companion object {
         private const val TAG = "SafetyInterceptor"
         const val ACTION_FORCE_STOP = "com.campbell.xgm.FORCE_STOP"
@@ -57,7 +59,6 @@ class SafetyInterceptor : AccessibilityService() {
             "Bestätigen", "Conferma", "YES", "Yes"
         )
 
-        private var overlayManager: GhostFingerOverlay? = null
         private val packageQueue = mutableListOf<String>()
         private var isRunning = false
         private var totalAppsToClose = 0
@@ -84,7 +85,7 @@ class SafetyInterceptor : AccessibilityService() {
 
             Handler(Looper.getMainLooper()).post {
                 if (useOverlay) {
-                    overlayManager?.showOverlay(totalAppsToClose)
+                    svc?.overlayManager?.showOverlay(totalAppsToClose)
                 }
             }
 
@@ -95,7 +96,7 @@ class SafetyInterceptor : AccessibilityService() {
             packageQueue.clear()
             isRunning = false
             Handler(Looper.getMainLooper()).post {
-                overlayManager?.hideOverlay()
+                instance?.overlayManager?.hideOverlay()
             }
             onFinishedCallback?.invoke()
             onFinishedCallback = null
@@ -160,7 +161,7 @@ class SafetyInterceptor : AccessibilityService() {
                 .getBoolean("ghost_finger_overlay", true)
             Handler(Looper.getMainLooper()).post {
                 if (useOverlay) {
-                    overlayManager?.updateProgress(currentClosed, totalAppsToClose, userFriendlyName)
+                    svc.overlayManager?.updateProgress(currentClosed, totalAppsToClose, userFriendlyName)
                 }
             }
 

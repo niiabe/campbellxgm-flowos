@@ -10,7 +10,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import com.campbell.xgm.theme.campbellxgmTheme
+import com.campbell.xgm.theme.CampbellxgmTheme
 import com.campbell.xgm.util.PermissionUtils
 
 class MainActivity : ComponentActivity() {
@@ -48,7 +48,7 @@ class MainActivity : ComponentActivity() {
           onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
       }
 
-      campbellxgmTheme(darkTheme = darkModeValue) { 
+      CampbellxgmTheme(darkTheme = darkModeValue) { 
           Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { 
               com.campbell.xgm.ui.AppNavigation(startDestination = startDestination)
           } 

@@ -29,18 +29,10 @@ class BoostShortcutHandlerActivity : Activity() {
             if (ghostFingerEnabled && accessibilityEnabled && SafetyInterceptor.instance != null) {
                 SafetyInterceptor.startForceStop(appsToKill)
                 boostManager.markAsClosed(appsToKill)
-                Toast.makeText(this, "Boosting ${appsToKill.size} apps...", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Force stopping ${appsToKill.size} apps...", Toast.LENGTH_SHORT).show()
             } else {
-                var killed = 0
-                for (pkg in appsToKill) {
-                    try {
-                        val process = Runtime.getRuntime().exec(arrayOf("am", "force-stop", pkg))
-                        val exited = process.waitFor(3, java.util.concurrent.TimeUnit.MILLISECONDS)
-                        if (exited && process.exitValue() == 0) killed++
-                    } catch (_: Exception) {}
-                }
-                boostManager.markAsClosed(appsToKill)
-                Toast.makeText(this, "Killed $killed of ${appsToKill.size} apps", Toast.LENGTH_SHORT).show()
+                boostManager.killApps(appsToKill)
+                Toast.makeText(this, "Killed ${appsToKill.size} apps", Toast.LENGTH_SHORT).show()
             }
         }
 

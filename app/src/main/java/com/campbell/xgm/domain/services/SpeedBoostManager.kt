@@ -24,6 +24,16 @@ class SpeedBoostManager(private val context: Context) {
         }
     }
 
+    fun killApps(packages: List<String>) {
+        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        for (pkg in packages) {
+            try {
+                am.killBackgroundProcesses(pkg)
+            } catch (_: Exception) {}
+        }
+        markAsClosed(packages)
+    }
+
     fun getRunningApps(): List<RunningAppInfo> {
         val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
         val pm = context.packageManager

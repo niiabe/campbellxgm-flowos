@@ -61,7 +61,7 @@ The app features a fully categorized control center with 13 toggles:
 > **Warning:** CampbellXGM uses powerful system APIs. You must grant specialized permissions for full functionality.
 
 ### Install
-1. Download the latest APK from the [Releases page](https://github.com/niiabe/campbellxgm-flowos/releases/latest) and install it (you may need to allow "Install unknown apps" for your file manager / browser).
+1. Download the appropriate APK for your device architecture (e.g. `arm64-v8a`, or the `universal` APK if unsure) from the [Releases page](https://github.com/niiabe/campbellxgm-flowos/releases/latest) and install it (you may need to allow "Install unknown apps" for your file manager / browser).
 2. Open the app — you'll be guided through the permission flow:
     - **Device Admin** — for aggressive app freezing
     - **Do Not Disturb** — to silence notifications during gameplay

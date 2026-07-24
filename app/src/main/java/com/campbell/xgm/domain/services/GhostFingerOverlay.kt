@@ -15,6 +15,9 @@ import android.widget.TextView
 class GhostFingerOverlay(private val context: Context) {
     private var windowManager: WindowManager? = null
     private var overlayView: View? = null
+    private var speedometerView: GhostFingerSpeedometerView? = null
+    private var progressView: TextView? = null
+    private var appNameView: TextView? = null
 
     fun showOverlay(totalApps: Int) {
         if (overlayView != null) return
@@ -38,27 +41,24 @@ class GhostFingerOverlay(private val context: Context) {
             background = border
         }
 
-        val speedometer = GhostFingerSpeedometerView(context).apply {
-            id = 1000
+        speedometerView = GhostFingerSpeedometerView(context).apply {
             val params = LinearLayout.LayoutParams(600, 600)
             layoutParams = params
         }
 
-        val progressView = TextView(context).apply {
+        progressView = TextView(context).apply {
             text = "0 / $totalApps"
             setTextColor(Color.WHITE)
             textSize = 48f
             gravity = Gravity.CENTER
             setPadding(0, 32, 0, 16)
-            id = 1001
         }
         
-        val appNameView = TextView(context).apply {
+        appNameView = TextView(context).apply {
             text = "Cleaning RAM..."
             setTextColor(Color.parseColor("#00E5FF")) // Cyan text
             textSize = 24f
             gravity = Gravity.CENTER
-            id = 1002
         }
         
         val stopButton = Button(context).apply {
@@ -85,7 +85,7 @@ class GhostFingerOverlay(private val context: Context) {
             setMargins(0, 80, 0, 0)
         }
 
-        layout.addView(speedometer)
+        layout.addView(speedometerView)
         layout.addView(progressView)
         layout.addView(appNameView)
         layout.addView(stopButton, buttonParams)
@@ -122,9 +122,9 @@ class GhostFingerOverlay(private val context: Context) {
 
     fun updateProgress(current: Int, total: Int, appName: String) {
         val pct = if (total > 0) (current.toFloat() / total.toFloat()) * 100f else 0f
-        (overlayView?.findViewById<GhostFingerSpeedometerView>(1000))?.setProgress(pct)
-        overlayView?.findViewById<TextView>(1001)?.text = "$current / $total"
-        overlayView?.findViewById<TextView>(1002)?.text = "Closing $appName..."
+        speedometerView?.setProgress(pct)
+        progressView?.text = "$current / $total"
+        appNameView?.text = "Closing $appName..."
     }
 
     fun hideOverlay() {
@@ -135,6 +135,9 @@ class GhostFingerOverlay(private val context: Context) {
                 e.printStackTrace()
             }
             overlayView = null
+            speedometerView = null
+            progressView = null
+            appNameView = null
         }
     }
 }

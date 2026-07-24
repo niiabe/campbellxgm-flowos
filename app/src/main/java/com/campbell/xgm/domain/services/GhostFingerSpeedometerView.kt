@@ -25,6 +25,10 @@ class GhostFingerSpeedometerView(context: Context) : View(context) {
         textAlign = Paint.Align.CENTER
     }
 
+    private val arcRect = RectF()
+    private val bgArcColor = Color.parseColor("#1E1E24")
+    private val fgArcColor = Color.parseColor("#00E5FF")
+
     fun setCustomTypeface(tf: Typeface?) {
         customTypeface = tf
         textPaint.typeface = tf
@@ -45,16 +49,16 @@ class GhostFingerSpeedometerView(context: Context) : View(context) {
         val cy = h / 2f
         val radius = min(w, h) / 2f - 40f
         
-        val rect = RectF(cx - radius, cy - radius, cx + radius, cy + radius)
+        arcRect.set(cx - radius, cy - radius, cx + radius, cy + radius)
         
         // Background Arc (Dark grey)
-        arcPaint.color = Color.parseColor("#1E1E24")
-        canvas.drawArc(rect, 135f, 270f, false, arcPaint)
+        arcPaint.color = bgArcColor
+        canvas.drawArc(arcRect, 135f, 270f, false, arcPaint)
         
         // Foreground Arc (Cyan - FlowOS Aesthetic)
-        arcPaint.color = Color.parseColor("#00E5FF")
+        arcPaint.color = fgArcColor
         val sweepAngle = (progress / 100f) * 270f
-        canvas.drawArc(rect, 135f, sweepAngle, false, arcPaint)
+        canvas.drawArc(arcRect, 135f, sweepAngle, false, arcPaint)
         
         // Percentage text
         canvas.drawText("${progress.toInt()}%", cx, cy + 30f, textPaint)

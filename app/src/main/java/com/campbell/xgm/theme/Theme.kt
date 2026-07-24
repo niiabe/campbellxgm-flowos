@@ -32,7 +32,7 @@ private val LightColorScheme = lightColorScheme(
 )
 
 @Composable
-fun campbellxgmTheme(
+fun CampbellxgmTheme(
   darkTheme: Boolean = true,
   content: @Composable () -> Unit,
 ) {

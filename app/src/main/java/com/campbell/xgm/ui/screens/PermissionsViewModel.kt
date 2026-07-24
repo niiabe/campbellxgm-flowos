@@ -9,8 +9,6 @@ import kotlinx.coroutines.flow.asStateFlow
 
 class PermissionsViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val context = application.applicationContext
-
     private val _hasAdmin = MutableStateFlow(false)
     val hasAdmin: StateFlow<Boolean> = _hasAdmin.asStateFlow()
 
@@ -33,13 +31,14 @@ class PermissionsViewModel(application: Application) : AndroidViewModel(applicat
     val hasNotificationAccess: StateFlow<Boolean> = _hasNotificationAccess.asStateFlow()
 
     fun checkPermissions() {
-        val state = PermissionUtils.checkAllPermissions(context)
+        val app = getApplication<Application>()
+        val state = PermissionUtils.checkAllPermissions(app)
         _hasAdmin.value = state.hasAdmin
         _hasDnd.value = state.hasDnd
         _hasNotifications.value = state.hasNotifications
         _hasWriteSettings.value = state.hasWriteSettings
         _hasAccessibility.value = state.hasAccessibility
         _hasUsageStats.value = state.hasUsageStats
-        _hasNotificationAccess.value = PermissionUtils.isNotificationListenerEnabled(context)
+        _hasNotificationAccess.value = PermissionUtils.isNotificationListenerEnabled(app)
     }
 }

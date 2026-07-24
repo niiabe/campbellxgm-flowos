@@ -74,8 +74,16 @@ fun CustomListsDialog(onDismiss: () -> Unit) {
                                     onClick = {
                                         val appsToKill = boostManager.getAppsToKillForList(name)
                                         if (appsToKill.isNotEmpty()) {
-                                            SafetyInterceptor.startForceStop(appsToKill)
-                                            boostManager.markAsClosed(appsToKill)
+                                            val accessibilityEnabled = com.campbell.xgm.util.PermissionUtils.isAccessibilityServiceEnabled(context)
+                                            val ghostFingerEnabled = context.getSharedPreferences("game_mode_prefs", android.content.Context.MODE_PRIVATE)
+                                                .getBoolean("accessibility_force_stop", false)
+
+                                            if (ghostFingerEnabled && accessibilityEnabled && SafetyInterceptor.instance != null) {
+                                                SafetyInterceptor.startForceStop(appsToKill)
+                                                boostManager.markAsClosed(appsToKill)
+                                            } else {
+                                                boostManager.killApps(appsToKill)
+                                            }
                                         }
                                     }
                                 )
