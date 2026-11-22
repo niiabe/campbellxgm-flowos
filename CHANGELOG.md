@@ -2,7 +2,7 @@
 
 All notable changes to CampbellXGM FlowOS will be documented in this file.
 
-## [Unreleased]
+## [1.8.0] - 2026-11-22
 
 ### Fixed
 - **Auto-teardown** — Game mode no longer switches off on slow game starts, popups (keyboard, system UI, Play Games sign-in) or long sessions. It now ends only after another app is seen twice in a row.
