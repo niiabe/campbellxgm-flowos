@@ -2,6 +2,25 @@
 
 All notable changes to CampbellXGM FlowOS will be documented in this file.
 
+## [1.8.0] - 2026-11-22
+
+### Fixed
+- **Auto-teardown** — Game mode no longer switches off on slow game starts, popups (keyboard, system UI, Play Games sign-in) or long sessions. It now ends only after another app is seen twice in a row.
+- **Freezing safety** — The default home screen, keyboard, phone and SMS apps are never frozen or suspended.
+- **Ping Stabilizer** — The VPN no longer captures (and drops) other apps' traffic, which cut Discord/Spotify/browsers offline during play.
+- **Network Boost** — Uses Wi-Fi low-latency mode instead of Wi-Fi debug logging; background-sync pause now has the permissions it needs.
+- **Auto-start** — No longer relaunches a game that is already open (could reset it to its menu).
+- **Keep Screen Awake** — Screen stays bright instead of dimming; 6-hour safety limit.
+- **Crash recovery** — Background sync is restored after a crash; stale saved settings are cleared after a normal stop.
+- **In-app updater** — Prefers the universal APK when a release has split APKs.
+- **Release workflow** — Handles split APK outputs.
+
+### Changed
+- Background apps are re-frozen every 30 s instead of every 5 s to leave more CPU for the game.
+
+### Removed
+- **CPU/GPU Tuner, Cool-down Mode, Storage Cleaner, Battery Profile** — These need root (or ADB-only permissions) and did nothing on a normal phone.
+
 ## [1.7.0] - 2026-07-24
 
 ### Added

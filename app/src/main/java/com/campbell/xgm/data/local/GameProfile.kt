@@ -13,11 +13,7 @@ data class GameProfile(
     val fpsOverlay: Boolean = false,
     val statsOverlay: Boolean = false,
     val networkBoost: Boolean = true,
-    val batteryProfile: Boolean = true,
-    val cpuTuner: Boolean = false,
-    val notificationFilter: Boolean = false,
-    val cooldownMode: Boolean = true,
-    val storageCleaner: Boolean = true
+    val notificationFilter: Boolean = false
 ) {
     fun toJson(): String {
         return JSONObject().apply {
@@ -29,11 +25,7 @@ data class GameProfile(
             put("fpsOverlay", fpsOverlay)
             put("statsOverlay", statsOverlay)
             put("networkBoost", networkBoost)
-            put("batteryProfile", batteryProfile)
-            put("cpuTuner", cpuTuner)
             put("notificationFilter", notificationFilter)
-            put("cooldownMode", cooldownMode)
-            put("storageCleaner", storageCleaner)
         }.toString()
     }
 
@@ -50,11 +42,7 @@ data class GameProfile(
                     fpsOverlay = obj.optBoolean("fpsOverlay", false),
                     statsOverlay = obj.optBoolean("statsOverlay", false),
                     networkBoost = obj.optBoolean("networkBoost", true),
-                    batteryProfile = obj.optBoolean("batteryProfile", true),
-                    cpuTuner = obj.optBoolean("cpuTuner", false),
-                    notificationFilter = obj.optBoolean("notificationFilter", false),
-                    cooldownMode = obj.optBoolean("cooldownMode", true),
-                    storageCleaner = obj.optBoolean("storageCleaner", true)
+                    notificationFilter = obj.optBoolean("notificationFilter", false)
                 )
             } catch (_: Exception) {
                 GameProfile()

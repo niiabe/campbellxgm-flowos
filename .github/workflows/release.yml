@@ -55,8 +55,14 @@ jobs:
           CAMPBELL_KEYSTORE_KEY_PWD: ${{ secrets.CAMPBELL_KEYSTORE_KEY_PWD }}
         run: ./gradlew assembleRelease
 
-      - name: Rename APK
-        run: mv app/build/outputs/apk/release/app-release.apk "campbellxgm-flowos-${{ steps.version.outputs.name }}.apk"
+      - name: Rename APKs
+        # ABI splits are enabled, so Gradle emits app-<abi>-release.apk and app-universal-release.apk.
+        run: |
+          cd app/build/outputs/apk/release
+          for f in app-*-release.apk; do
+            abi="${f#app-}"; abi="${abi%-release.apk}"
+            mv "$f" "$GITHUB_WORKSPACE/campbellxgm-flowos-${{ steps.version.outputs.name }}-$abi.apk"
+          done
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -67,6 +73,6 @@ jobs:
             Signed release v${{ steps.version.outputs.name }} (versionCode ${{ steps.version.outputs.code }}).
 
             Tap the APK below to download, or let the app update itself from Settings → App Updates.
-          files: campbellxgm-flowos-${{ steps.version.outputs.name }}.apk
+          files: campbellxgm-flowos-${{ steps.version.outputs.name }}-*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

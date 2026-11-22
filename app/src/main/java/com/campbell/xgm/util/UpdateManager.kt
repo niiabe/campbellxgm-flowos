@@ -93,13 +93,17 @@ object UpdateManager {
             val assets = obj.optJSONArray("assets") ?: JSONArray()
             var apkUrl: String? = null
             var apkSize = 0L
+            // Releases may ship per-ABI split APKs; prefer the universal one so any device can install it.
             for (i in 0 until assets.length()) {
                 val asset = assets.getJSONObject(i)
                 val assetName = asset.optString("name", "")
                 if (assetName.endsWith(".apk", ignoreCase = true)) {
-                    apkUrl = asset.optString("browser_download_url", "")
-                    apkSize = asset.optLong("size", 0L)
-                    break
+                    val isUniversal = assetName.contains("universal", ignoreCase = true)
+                    if (apkUrl == null || isUniversal) {
+                        apkUrl = asset.optString("browser_download_url", "")
+                        apkSize = asset.optLong("size", 0L)
+                    }
+                    if (isUniversal) break
                 }
             }
             if (apkUrl.isNullOrBlank()) return null

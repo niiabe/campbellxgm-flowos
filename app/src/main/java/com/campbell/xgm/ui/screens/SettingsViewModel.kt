@@ -11,13 +11,8 @@ import android.util.Log
 import androidx.core.content.edit
 import androidx.lifecycle.AndroidViewModel
 import com.campbell.xgm.domain.services.CampbellAdminReceiver
-import com.campbell.xgm.util.FileUtils
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import java.io.File
-import java.text.DecimalFormat
 
 enum class DnsProvider(val hostname: String, val displayName: String) {
     SYSTEM_DEFAULT("", "System Default"),
@@ -57,14 +52,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _isNetworkBoostEnabled = MutableStateFlow(sharedPreferences.getBoolean("network_boost", true))
     val isNetworkBoostEnabled: StateFlow<Boolean> = _isNetworkBoostEnabled
 
-    private val _isBatteryProfileEnabled = MutableStateFlow(sharedPreferences.getBoolean("battery_profile", true))
-    val isBatteryProfileEnabled: StateFlow<Boolean> = _isBatteryProfileEnabled
-
     private val _isAutoStartEnabled = MutableStateFlow(sharedPreferences.getBoolean("auto_start_game_mode", false))
     val isAutoStartEnabled: StateFlow<Boolean> = _isAutoStartEnabled
-
-    private val _isCpuTunerEnabled = MutableStateFlow(sharedPreferences.getBoolean("cpu_tuner", false))
-    val isCpuTunerEnabled: StateFlow<Boolean> = _isCpuTunerEnabled
 
     private val _isNotificationFilterEnabled = MutableStateFlow(sharedPreferences.getBoolean("notification_filter", false))
     val isNotificationFilterEnabled: StateFlow<Boolean> = _isNotificationFilterEnabled
@@ -76,12 +65,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     
     private val _isGhostFingerOverlayEnabled = MutableStateFlow(sharedPreferences.getBoolean("ghost_finger_overlay", true))
     val isGhostFingerOverlayEnabled: StateFlow<Boolean> = _isGhostFingerOverlayEnabled
-
-    private val _isCooldownEnabled = MutableStateFlow(sharedPreferences.getBoolean("cooldown_mode", true))
-    val isCooldownEnabled: StateFlow<Boolean> = _isCooldownEnabled
-
-    private val _isStorageCleanerEnabled = MutableStateFlow(sharedPreferences.getBoolean("storage_cleaner", true))
-    val isStorageCleanerEnabled: StateFlow<Boolean> = _isStorageCleanerEnabled
 
     private val _isDarkModeEnabled = MutableStateFlow(sharedPreferences.getBoolean("dark_mode", true))
     val isDarkModeEnabled: StateFlow<Boolean> = _isDarkModeEnabled
@@ -121,7 +104,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _isDeviceAdmin = MutableStateFlow(dpm.isAdminActive(adminComponent))
     val isDeviceAdmin: StateFlow<Boolean> = _isDeviceAdmin
 
-    // Root State (features like CPU Tuner / Cooldown / Network Boost need DO or root to fully work)
+    // Root State (Network Boost / DNS need Device Owner or root to fully work)
     private val _isRooted = MutableStateFlow(isDeviceRooted())
     val isRooted: StateFlow<Boolean> = _isRooted
 
@@ -172,19 +155,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         _isNetworkBoostEnabled.value = enabled
     }
 
-    fun toggleBatteryProfile(enabled: Boolean) {
-        sharedPreferences.edit { putBoolean("battery_profile", enabled) }
-        _isBatteryProfileEnabled.value = enabled
-    }
-
     fun toggleAutoStart(enabled: Boolean) {
         sharedPreferences.edit { putBoolean("auto_start_game_mode", enabled) }
         _isAutoStartEnabled.value = enabled
-    }
-
-    fun toggleCpuTuner(enabled: Boolean) {
-        sharedPreferences.edit { putBoolean("cpu_tuner", enabled) }
-        _isCpuTunerEnabled.value = enabled
     }
 
     fun toggleNotificationFilter(enabled: Boolean) {
@@ -202,16 +175,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         _isGhostFingerOverlayEnabled.value = enabled
     }
 
-    fun toggleCooldown(enabled: Boolean) {
-        sharedPreferences.edit { putBoolean("cooldown_mode", enabled) }
-        _isCooldownEnabled.value = enabled
-    }
-
-    fun toggleStorageCleaner(enabled: Boolean) {
-        sharedPreferences.edit { putBoolean("storage_cleaner", enabled) }
-        _isStorageCleanerEnabled.value = enabled
-    }
-
     fun toggleDarkMode(enabled: Boolean) {
         sharedPreferences.edit { putBoolean("dark_mode", enabled) }
         _isDarkModeEnabled.value = enabled
@@ -225,64 +188,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun toggleSpeedBoost(enabled: Boolean) {
         sharedPreferences.edit { putBoolean("speed_boost_enabled", enabled) }
         _isSpeedBoostEnabled.value = enabled
-    }
-
-    suspend fun getCacheSize(packageName: String): String = withContext(Dispatchers.IO) {
-        try {
-            val context = getApplication<Application>()
-            val cacheDir = context.cacheDir
-            val appCacheSize = FileUtils.getDirSize(cacheDir)
-            
-            val packageContext = context.createPackageContext(packageName, 0)
-            val packageCacheSize = FileUtils.getDirSize(packageContext.cacheDir)
-            
-            val totalSize = appCacheSize + packageCacheSize
-            formatSize(totalSize)
-        } catch (e: Exception) {
-            "0 B"
-        }
-    }
-
-    suspend fun clearCache(packageName: String): String = withContext(Dispatchers.IO) {
-        try {
-            val context = getApplication<Application>()
-            val beforeSize = getCacheSize(packageName)
-            
-            FileUtils.deleteDir(context.cacheDir)
-            
-            try {
-                val packageContext = context.createPackageContext(packageName, 0)
-                FileUtils.deleteDir(packageContext.cacheDir)
-            } catch (_: Exception) {}
-            
-            clearTempFiles()
-            
-            val afterSize = getCacheSize(packageName)
-            Log.i("StorageCleaner", "Cleared cache: $beforeSize -> $afterSize")
-            beforeSize
-        } catch (e: Exception) {
-            Log.e("StorageCleaner", "Failed to clear cache: ${e.message}")
-            "0 B"
-        }
-    }
-
-    private suspend fun clearTempFiles() = withContext(Dispatchers.IO) {
-        try {
-            val tempDir = File(getApplication<Application>().cacheDir, "temp")
-            if (tempDir.exists()) {
-                FileUtils.deleteDir(tempDir)
-            }
-        } catch (_: Exception) {}
-    }
-
-    private fun formatSize(size: Long): String {
-        val df = DecimalFormat("#.##")
-        return when {
-            size >= 1024 * 1024 * 1024 -> "${df.format(size / (1024.0 * 1024.0 * 1024.0))} GB"
-            size >= 1024 * 1024 -> "${df.format(size / (1024.0 * 1024.0))} MB"
-            size >= 1024 -> "${df.format(size / 1024.0)} KB"
-            else -> "$size B"
-        }
     }
 
     fun setDnsProvider(provider: DnsProvider) {

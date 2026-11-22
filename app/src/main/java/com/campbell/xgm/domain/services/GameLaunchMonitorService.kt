@@ -81,6 +81,7 @@ class GameLaunchMonitorService : Service() {
                             Log.i("GameLaunchMonitor", "Game detected: $foregroundApp - starting PipelineService")
                             val pipelineIntent = Intent(this@GameLaunchMonitorService, PipelineService::class.java).apply {
                                 putExtra("TARGET_PACKAGE", foregroundApp)
+                                putExtra(PipelineService.EXTRA_GAME_ALREADY_OPEN, true)
                             }
                             startForegroundService(pipelineIntent)
                         }
