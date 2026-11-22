@@ -696,11 +696,12 @@ class PipelineService : Service() {
     private fun startPeriodicFreezing(apps: List<String>) {
         freezeJob = serviceScope.launch {
             while (isActive) {
+                // Wait first: the pipeline has just killed these apps once already.
+                delay(FREEZE_INTERVAL_MS)
                 // Re-check media each cycle so a media app that starts mid-game is protected,
                 // and one that stops playing can be frozen again.
                 val mediaPackages = com.campbell.xgm.util.MediaUtils.getActiveMediaPackages(this@PipelineService)
                 killBackgroundProcesses(apps.filter { it !in mediaPackages })
-                delay(FREEZE_INTERVAL_MS)
             }
         }
     }
