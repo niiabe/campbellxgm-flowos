@@ -61,13 +61,15 @@ class PingStabilizerVpnService : VpnService() {
 
         Log.i("PingStabilizer", "Starting Ping Stabilizer VPN. Bypassing: $targetPackage")
         try {
+            // No routes and only our own app allowed: the tunnel captures nothing.
+            // Previously it routed 0.0.0.0/0 for every app except the game, but nothing ever
+            // read the tunnel, so Discord/Spotify/browsers lost internet during play.
+            // The useful part is the keepalive below, which keeps the mobile radio awake.
             val builder = Builder()
                 .setSession("CampbellXGM Ping Stabilizer")
                 .setMtu(1500)
                 .addAddress("10.0.0.2", 32)
-                .addRoute("0.0.0.0", 0)
-                .addDisallowedApplication(targetPackage)
-                .addDisallowedApplication(packageName)
+                .addAllowedApplication(packageName)
 
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
                 builder.setMetered(false)

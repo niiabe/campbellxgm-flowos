@@ -42,12 +42,8 @@ fun SettingsScreen(
     val isAutoBrightnessLockEnabled by viewModel.isAutoBrightnessLockEnabled.collectAsState()
     val isFpsOverlayEnabled by viewModel.isFpsOverlayEnabled.collectAsState()
     val isNetworkBoostEnabled by viewModel.isNetworkBoostEnabled.collectAsState()
-    val isBatteryProfileEnabled by viewModel.isBatteryProfileEnabled.collectAsState()
     val isAutoStartEnabled by viewModel.isAutoStartEnabled.collectAsState()
-    val isCpuTunerEnabled by viewModel.isCpuTunerEnabled.collectAsState()
     val isNotificationFilterEnabled by viewModel.isNotificationFilterEnabled.collectAsState()
-    val isCooldownEnabled by viewModel.isCooldownEnabled.collectAsState()
-    val isStorageCleanerEnabled by viewModel.isStorageCleanerEnabled.collectAsState()
     val isDarkModeEnabled by viewModel.isDarkModeEnabled.collectAsState()
     val isStatsOverlayEnabled by viewModel.isStatsOverlayEnabled.collectAsState()
     val isSpeedBoostEnabled by viewModel.isSpeedBoostEnabled.collectAsState()
@@ -200,37 +196,6 @@ fun SettingsScreen(
                     description = "Force-stops all background apps to free RAM when a game is launched.",
                     checked = isAggressiveFreezingEnabled,
                     onCheckedChange = { viewModel.toggleAggressiveFreezing(it) }
-                )
-
-                SettingsSwitch(
-                    title = "CPU/GPU Tuner",
-                    description = "Optimizes CPU governor for maximum performance. Requires Device Owner.",
-                    checked = isCpuTunerEnabled,
-                    onCheckedChange = { viewModel.toggleCpuTuner(it) },
-                    isEnabled = isDeviceOwner
-                )
-
-                SettingsSwitch(
-                    title = "Battery Profile",
-                    description = "Attempts to disable battery saver mode during gameplay for consistent performance.",
-                    checked = isBatteryProfileEnabled,
-                    onCheckedChange = { viewModel.toggleBatteryProfile(it) }
-                )
-
-                SettingsSwitch(
-                    title = "Cool-down Mode",
-                    description = "Reduces performance when device overheats to prevent throttling." +
-                        if (!hasFullPrivileges) " (Limited: CPU throttle needs Device Owner/root)" else "",
-                    checked = isCooldownEnabled,
-                    onCheckedChange = { viewModel.toggleCooldown(it) }
-                )
-
-                SettingsSwitch(
-                    title = "Storage Cleaner",
-                    description = "Clears game cache and temp files before launch to free storage." +
-                        if (!hasFullPrivileges) " (Limited: cannot clear other apps' cache without Device Owner/root)" else "",
-                    checked = isStorageCleanerEnabled,
-                    onCheckedChange = { viewModel.toggleStorageCleaner(it) }
                 )
             }
 

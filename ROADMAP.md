@@ -10,13 +10,9 @@
 | Auto-Brightness Lock | ✅ Done | Lock brightness during gameplay |
 | FPS Counter | ✅ Done | Real-time FPS overlay toggleable in settings |
 | Network Boost | ✅ Done | Lock WiFi band, disable background data, prioritize gaming traffic |
-| Battery Profile | ✅ Done | Switch to performance mode, disable battery saver |
 | Auto-Start Game Mode | ✅ Done | Detect game launch and auto-activate game mode |
-| CPU/GPU Tuner | ✅ Done | Adjust performance governor (Device Owner only) |
 | Notification Filter | ✅ Done | Allow specific contacts/apps to bypass DND |
-| Cool-down Mode | ✅ Done | Lower performance when device overheats |
 | DNS Provider | ✅ Done | Switch between Google, Cloudflare, OpenDNS, Quad9, AdGuard |
-| Storage Cleaner | ✅ Done | Clear game cache and temp files before launch to free storage |
 
 ## Pro Features (Paid - Future Release)
 

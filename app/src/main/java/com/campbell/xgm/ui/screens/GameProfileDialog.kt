@@ -72,20 +72,8 @@ fun GameProfileDialog(
                 ProfileSwitch("Network Boost", "Optimize network for low latency", profile.networkBoost) {
                     profile = profile.copy(networkBoost = it)
                 }
-                ProfileSwitch("Battery Profile", "Optimize battery usage for gaming", profile.batteryProfile) {
-                    profile = profile.copy(batteryProfile = it)
-                }
-                ProfileSwitch("CPU Tuner", "Tune CPU governor for performance", profile.cpuTuner) {
-                    profile = profile.copy(cpuTuner = it)
-                }
                 ProfileSwitch("Notification Filter", "Filter non-essential notifications", profile.notificationFilter) {
                     profile = profile.copy(notificationFilter = it)
-                }
-                ProfileSwitch("Thermal Cooldown", "Monitor and manage device temperature", profile.cooldownMode) {
-                    profile = profile.copy(cooldownMode = it)
-                }
-                ProfileSwitch("Storage Cleaner", "Clear cache before launching game", profile.storageCleaner) {
-                    profile = profile.copy(storageCleaner = it)
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))

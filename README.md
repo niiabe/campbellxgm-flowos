@@ -24,21 +24,17 @@ When you launch a game through CampbellXGM, it aggressively shuts down system di
 *   **Auto-Teardown:** Detects when you leave a game via Usage Access monitoring and automatically restores all system settings — no manual "Stop Game Mode" tap needed.
 *   **Auto-Start Game Mode:** Add your games to the dashboard, enable auto-start, and game mode activates automatically when you launch any saved game.
 *   **FPS Overlay:** Shows real-time frame rate on screen during gameplay.
-*   **Thermal Cooldown Protection:** Monitors battery temperature. If your device overheats, it throttles CPU to prevent hardware damage, then restores performance when safe.
-*   **Network Boost & Custom DNS:** Disables background sync, binds to active network, and overrides DNS to fast private endpoints (Cloudflare, Google, AdGuard, Quad9).
+*   **Network Boost & Custom DNS:** Enables Wi-Fi low-latency mode, pauses background sync, and overrides DNS to fast private endpoints (Cloudflare, Google, AdGuard, Quad9).
 *   **DND & Notification Filter:** Silences all notifications or allows only calls and priority messages during gameplay.
 *   **Keep Screen Awake & Auto-Brightness Lock:** Prevents screen timeout and locks brightness for consistent gaming.
-*   **Storage Cleaner:** Clears game cache and temp files before launch to free storage.
 *   **Ping Stabilizer VPN:** Keeps mobile radio active with periodic keepalive packets to prevent connection drops.
-*   **CPU/GPU Tuner:** Sets CPU governor to maximum performance mode (requires Device Owner).
-*   **Battery Profile:** Disables battery saver and optimizes power for gaming.
 
 ## Settings Dashboard
 
-The app features a fully categorized control center with 13 toggles:
+The app features a fully categorized control center:
 
 - **System Privileges:** Device Admin, Device Owner (ADB), Accessibility Service, Usage Access
-- **Performance:** Aggressive App Freezing, CPU/GPU Tuner, Battery Profile, Cool-down Mode, Storage Cleaner
+- **Performance:** Aggressive App Freezing
 - **Connectivity:** Network Boost, Ping Stabilizer, DNS Provider
 - **Game Mode:** DND, Notification Filter, Auto-Start Game Mode, FPS Overlay, Keep Screen Awake, Auto-Brightness Lock
 
